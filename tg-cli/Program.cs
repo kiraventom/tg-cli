@@ -17,9 +17,14 @@ public static class Program
         var settings = settingsManager.LoadSettings();
 
         var client = new Client(tgCliFolder, settings);
-        var renderer = new Renderer(ansiConsole, client);
+        var inputListener = new InputListener(ansiConsole);
+        var renderer = new Renderer(ansiConsole);
+        var @interface = new Interface(ansiConsole);
+        client.UpdateReceived += @interface.OnClientUpdateReceived;
+        inputListener.CommandReceived += @interface.OnListenerCommandReceived;
+        @interface.RenderRequested += renderer.OnRenderRequested;
         
         await client.Start();
-        await renderer.StartInputCycle();
+        await inputListener.StartListen();
     }
 }
