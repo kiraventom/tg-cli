@@ -88,9 +88,21 @@ public class Renderer : IRenderer
         {
             title += new string(' ', chatTitleWidth - chat.Title.Length);
         }
+        
+        const string titleMarkupTemplate = "{0}";
+        const string selectedTitleMarkupTemplate = $"[invert]{titleMarkupTemplate}[/]";
+        const string unreadColor = "blue";
+        const string mutedUnreadColor = "gray";
+        const string unreadMarkupTemplate = "[{0}] {1}[/]";
+        
+        var currentTitleMarkupTemplate = isSelected ? selectedTitleMarkupTemplate : titleMarkupTemplate;
+        var escapedTitle = title.EscapeMarkup();
+        var titleMarkup = string.Format(currentTitleMarkupTemplate, escapedTitle);
 
-        var titleMarkup = isSelected ? $"[invert]{title.EscapeMarkup()}[/]" : title.EscapeMarkup();
-        var unreadMarkup = isSelected ? $"[blue invert] {unreadText}[/]" : $"[blue] {unreadText}[/]";
+        var currentUnreadColor = chat.IsMuted ? mutedUnreadColor : unreadColor;
+        currentUnreadColor += isSelected ? " invert" : string.Empty;
+        var unreadMarkup = string.Format(unreadMarkupTemplate, currentUnreadColor, unreadText);
+        
         var markup = $"{titleMarkup}{unreadMarkup}";
         return new Markup(markup);
     }

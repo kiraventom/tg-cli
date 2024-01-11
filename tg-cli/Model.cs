@@ -42,6 +42,7 @@ public class Chat
     public string Title { get; set; }
     public int UnreadCount { get; set; }
     public bool IsMuted { get; set; }
+    public bool IsPrivate => Id > 0;
 
     public Chat(long id, string title)
     {
@@ -54,11 +55,11 @@ public class Model
 {
     private readonly IRenderer _renderer;
     
-    private readonly Dictionary<string, bool> _scopesMuted = new();
-
     private readonly ObservableCollection<Chat> _chats = new();
     private readonly List<Chat> _sortedChats = new();
     private readonly Dictionary<long, Chat> _chatsDict = new();
+    
+    private bool _muteChanneldByDefault;
 
     private int _topChatIndex;
     private int _selectedChatIndex;
@@ -79,7 +80,8 @@ public class Model
 
     public async void OnClientUpdateReceived(object sender, TdApi.Update update)
     {
-        update.Log(_chatsDict);
+        Program.Logger.LogUpdate(update, _chatsDict);
+        
         switch (update)
         {
             case TdApi.Update.UpdateNewChat updateNewChat:
@@ -90,6 +92,9 @@ public class Model
                 {
                     UnreadCount = chat.UnreadCount,
                 };
+                
+                if (!newChat.IsPrivate)
+                    newChat.IsMuted = _muteChanneldByDefault;
 
                 _chats.Add(newChat);
                 if (_chats.Count - 1 > VisibleChatsCount)
@@ -117,11 +122,21 @@ public class Model
                 chat.UnreadCount = updateChatReadInbox.UnreadCount;
                 break;
             }
-
+            
             case TdApi.Update.UpdateScopeNotificationSettings updateScopeNotificationSettings:
-            {
-                _scopesMuted[updateScopeNotificationSettings.Scope.DataType] = updateScopeNotificationSettings.NotificationSettings.MuteFor != 0;
+            {   
+                _muteChanneldByDefault = updateScopeNotificationSettings.NotificationSettings.MuteFor != 0;
                 return;
+            }
+
+            case TdApi.Update.UpdateChatNotificationSettings updateChatNotificationSettings:
+            {
+                if (!_chatsDict.TryGetValue(updateChatNotificationSettings.ChatId, out var chat))
+                    return; // TODO
+                    
+                if (!updateChatNotificationSettings.NotificationSettings.UseDefaultMuteFor)
+                    chat.IsMuted = updateChatNotificationSettings.NotificationSettings.MuteFor != 0;
+                break;
             }
 
             default:
