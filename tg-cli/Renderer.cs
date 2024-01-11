@@ -3,19 +3,26 @@ using Spectre.Console.Rendering;
 
 namespace tg_cli;
 
-public class Renderer
+public interface IRenderer
 {
-    private static readonly Style SelectedChatStyle = new(Color.Black, Color.White);
+    public int VisibleChatsCount { get; }
+}
 
+public class Renderer : IRenderer
+{
     private const double ChatListWidthMod = 0.2;
     private const double ChatWidthMod = 1 - ChatListWidthMod;
+    private const int UnreadCounterWidth = 3;
 
     private readonly IAnsiConsole _console;
 
     private int ConsoleWidthWithoutBorders => _console.Profile.Width - 1 - 1 - 1;
+    private int ConsoleHeightWithoutBorders => _console.Profile.Height - 1 - 1 - 1 - 1;
 
     private int ChatWidth => (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
     private int ChatListWidth => ConsoleWidthWithoutBorders - ChatWidth;
+
+    public int VisibleChatsCount => ConsoleHeightWithoutBorders - 1 - 1;
 
     public Renderer(IAnsiConsole console)
     {
@@ -24,17 +31,15 @@ public class Renderer
 
     public void OnRenderRequested(VisibleInterface visibleInterface)
     {
-        _console.Clear();
-
         var chatListTable = new Table {Border = TableBorder.None, ShowHeaders = false};
         chatListTable.AddColumn(string.Empty);
         chatListTable.Columns[0].Padding(0, 0);
-        
+
         for (var i = 0; i < visibleInterface.Chats.Count; ++i)
         {
-            var chatTitle = visibleInterface.Chats[i];
-            var markup = MarkupChatTitle(chatTitle, ChatListWidth, i == visibleInterface.SelectedIndex);
-            chatListTable.AddRow(markup);
+            var chat = visibleInterface.Chats[i];
+            var chatMarkup = MarkupChat(chat, i == visibleInterface.SelectedIndex);
+            chatListTable.AddRow(chatMarkup);
         }
 
         var chatPanel = new Markup("Messages here")
@@ -42,30 +47,51 @@ public class Renderer
             Justification = Justify.Center
         };
 
-        var mainTable = new Table {Border = TableBorder.Rounded};
-        mainTable.AddColumn("Chats list");
-        mainTable.Columns[0].Width = ChatListWidth;
-        mainTable.Columns[0].Alignment = Justify.Left;
+        var messengerTable = new Table {Border = TableBorder.Rounded};
+        messengerTable.AddColumn("Chats list");
+        messengerTable.Columns[0].Width = ChatListWidth;
+        messengerTable.Columns[0].Alignment = Justify.Left;
 
-        var selectedChatTitle = visibleInterface.Chats[visibleInterface.SelectedIndex];
-        mainTable.AddColumn(selectedChatTitle.EscapeMarkup());
-        mainTable.Columns[1].Width = ChatWidth;
-        
-        mainTable.AddRow(chatListTable, chatPanel);
+        var selectedChat = visibleInterface.Chats[visibleInterface.SelectedIndex];
+        messengerTable.AddColumn(selectedChat.Title.EscapeMarkup());
+        messengerTable.Columns[1].Width = ChatWidth;
 
+        messengerTable.AddRow(chatListTable, chatPanel);
+
+        var mainTable = new Table {Border = TableBorder.None, ShowHeaders = false};
+        mainTable.AddColumn(string.Empty);
+        mainTable.Columns[0].Padding(0, 0);
+        mainTable.AddRow(messengerTable);
+        mainTable.AddRow(visibleInterface.CommandInput);
+
+        _console.Clear();
         _console.Write(mainTable);
     }
 
-    private static IRenderable MarkupChatTitle(string title, int crop, bool isSelected)
+    private IRenderable MarkupChat(Chat chat, bool isSelected)
     {
         const char ellipsis = '\u2026';
+        const string infinity = "\u221e";
 
-        if (crop > 0)
+        var title = chat.Title;
+
+        var unreadText = chat.UnreadCount == 0 ? string.Empty : chat.UnreadCount.ToString();
+        if (unreadText.Length > UnreadCounterWidth)
+            unreadText = infinity;
+
+        var chatTitleWidth = unreadText.Length > 0 ? ChatListWidth - unreadText.Length - 1 : ChatListWidth;
+        if (chat.Title.Length > chatTitleWidth)
         {
-            if (title.Length > crop)
-                title = title[..(crop - 1)] + ellipsis;
+            title = chatTitleWidth < 1 ? ellipsis.ToString() : title[..(chatTitleWidth - 1)] + ellipsis;
+        }
+        else
+        {
+            title += new string(' ', chatTitleWidth - chat.Title.Length);
         }
 
-        return new Markup(title.EscapeMarkup(), isSelected ? SelectedChatStyle : null);
+        var titleMarkup = isSelected ? $"[invert]{title.EscapeMarkup()}[/]" : title.EscapeMarkup();
+        var unreadMarkup = isSelected ? $"[blue invert] {unreadText}[/]" : $"[blue] {unreadText}[/]";
+        var markup = $"{titleMarkup}{unreadMarkup}";
+        return new Markup(markup);
     }
 }

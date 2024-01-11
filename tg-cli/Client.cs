@@ -15,34 +15,29 @@ public partial class TgCliSettings : ISettings
 
 public class Client
 {
-    private readonly string _tgCliFolder;
     private readonly TgCliSettings _settings;
     private readonly CancellationTokenSource _waitingForReadyCts = new();
 
     public event EventHandler<TdApi.Update> UpdateReceived;
 
-    public Client(string tgCliFolder, TgCliSettings settings)
+    public Client(TgCliSettings settings)
     {
-        _tgCliFolder = tgCliFolder;
         _settings = settings;
     }
 
-    public async Task Start()
+    public async Task Start(string databaseDirPath, string filesDirPath, string tdLibLogsDirPath)
     {
-        var databaseDirectory = Path.Combine(_tgCliFolder, "database");
-        var filesDirectory = Path.Combine(_tgCliFolder, "files");
-        var logsDirectory = Path.Combine(_tgCliFolder, "logs");
-        Directory.CreateDirectory(databaseDirectory);
-        Directory.CreateDirectory(filesDirectory);
-        Directory.CreateDirectory(logsDirectory);
+        Directory.CreateDirectory(databaseDirPath);
+        Directory.CreateDirectory(filesDirPath);
+        Directory.CreateDirectory(tdLibLogsDirPath);
 
         var client = new TdClient();
-        var pathToLogFile = Path.Combine(logsDirectory, "tdlib.log");
+        var pathToLogFile = Path.Combine(tdLibLogsDirPath, "tdlib.log");
         InitLogging(client, pathToLogFile);
 
         client.UpdateReceived += ClientOnUpdateReceived;
 
-        await client.SetTdlibParametersAsync(false, databaseDirectory, filesDirectory, null, false, false, false,
+        await client.SetTdlibParametersAsync(false, databaseDirPath, filesDirPath, null, false, false, false,
             false, 20623965, "6c3f5f166e8fd2b613e88395e32b42dd", "ru-RU", "Windows", "10", "1.0");
 
         try

@@ -19,6 +19,7 @@ public class InputListener
     private readonly IAnsiConsole _console;
     private readonly StringBuilder _inputBuilder = new();
 
+    public event Action<string> InputReceived;
     public event Action<Command> CommandReceived;
 
     public InputListener(IAnsiConsole console)
@@ -34,15 +35,21 @@ public class InputListener
             if (cki!.Value.Key == ConsoleKey.Escape)
             {
                 _inputBuilder.Clear();
+                InputReceived?.Invoke(string.Empty);
                 continue;
             }
 
             _inputBuilder.Append(cki!.Value.KeyChar);
-            var isCommand = TryParseCommand(_inputBuilder.ToString(), out var command);
+            var input = _inputBuilder.ToString();
+            var isCommand = TryParseCommand(input, out var command);
             if (!isCommand)
+            {
+                InputReceived?.Invoke(input);
                 continue;
+            }
 
             _inputBuilder.Clear();
+            InputReceived?.Invoke(string.Empty);
             
             if (command == Command.Quit)
                 return;
