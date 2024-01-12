@@ -11,6 +11,9 @@ public interface IRenderer
 
 public class Renderer : IRenderer
 {
+    private const string UnreadColor = "blue";
+    private const string MutedUnreadColor = "gray";
+
     private const double ChatListWidthMod = 0.2;
     private const double ChatWidthMod = 1 - ChatListWidthMod;
     private const int UnreadCounterWidth = 3;
@@ -71,26 +74,41 @@ public class Renderer : IRenderer
         messengerTable.Columns[1].Width = ChatWidth;
         messengerTable.AddRow(chatListLayout, chatPanel);
 
-        StringBuilder sb = new(" ");
-        for (var i = 0; i < visibleInterface.Folders.Count; ++i)
-        {
-            var folder = visibleInterface.Folders[i];
-            var markup = i == visibleInterface.SelectedFolderIndex ? $"[underline]{folder.Title}[/]" : $"{folder.Title}";
-
-            sb.Append(markup);
-            if (i != visibleInterface.Folders.Count - 1)
-                sb.Append(" | ");
-        }
+        var tabs = MarkupTabs(visibleInterface.Folders, visibleInterface.SelectedFolderIndex);
 
         var mainTable = new Table {Border = TableBorder.None, ShowHeaders = false};
         mainTable.AddColumn(string.Empty);
         mainTable.Columns[0].Padding(0, 0);
-        mainTable.AddRow(sb.ToString());
+        mainTable.AddRow(tabs);
         mainTable.AddRow(messengerTable);
         mainTable.AddRow(visibleInterface.CommandInput);
 
         _console.Clear();
         _console.Write(mainTable);
+    }
+
+    private static string MarkupTabs(IReadOnlyList<Folder> folders, int selectedFolderIndex)
+    {
+        StringBuilder sb = new(" ");
+        for (var i = 0; i < folders.Count; ++i)
+        {
+            var folder = folders[i];
+            var markup = i == selectedFolderIndex ? $"[underline]{folder.Title}[/]" : $"{folder.Title}";
+
+            sb.Append(markup);
+            
+            var unreadChats = folder.Chats.Where(c => c.UnreadCount > 0).ToList();
+            var color = unreadChats.All(c => c.IsMuted) ? MutedUnreadColor : UnreadColor;
+            var unreadChatsCount = unreadChats.Count;
+            if (unreadChatsCount > 0)
+                sb.Append($" [{color}][[{unreadChatsCount}]][/]");
+                
+            if (i != folders.Count - 1)
+                sb.Append(" | ");
+        }
+
+        var tabs = sb.ToString();
+        return tabs;
     }
 
     private IRenderable MarkupChat(Chat chat, bool isSelected)
@@ -116,15 +134,13 @@ public class Renderer : IRenderer
 
         const string titleMarkupTemplate = "{0}";
         const string selectedTitleMarkupTemplate = $"[invert]{titleMarkupTemplate}[/]";
-        const string unreadColor = "blue";
-        const string mutedUnreadColor = "gray";
         const string unreadMarkupTemplate = "[{0}] {1}[/]";
 
         var currentTitleMarkupTemplate = isSelected ? selectedTitleMarkupTemplate : titleMarkupTemplate;
         var escapedTitle = title.EscapeMarkup();
         var titleMarkup = string.Format(currentTitleMarkupTemplate, escapedTitle);
 
-        var currentUnreadColor = chat.IsMuted ? mutedUnreadColor : unreadColor;
+        var currentUnreadColor = chat.IsMuted ? MutedUnreadColor : UnreadColor;
         currentUnreadColor += isSelected ? " invert" : string.Empty;
         var unreadMarkup = string.Format(unreadMarkupTemplate, currentUnreadColor, unreadText);
 
