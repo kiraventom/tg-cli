@@ -11,6 +11,7 @@ public struct VisibleInterface
     public IReadOnlyList<Chat> Chats { get; }
     public int SelectedChatIndex { get; }
     public string CommandInput { get; }
+    
 
     public VisibleInterface(IReadOnlyList<Chat> chats, int selectedChatIndex, string commandInput,
         IReadOnlyList<Folder> folders, int selectedFolderIndex)
@@ -51,6 +52,7 @@ public class Chat
     public int UnreadCount { get; set; }
     public bool IsMuted { get; set; }
     public bool IsPrivate => Id > 0;
+    public string LastMessagePreview { get; set; }
 
     public Chat(long id, string title)
     {
@@ -64,7 +66,7 @@ public class Folder
     public int TopChatIndex { get; set; }
     public int SelectedChatIndex { get; set; }
     public int RelativeSelectedChatIndex => SelectedChatIndex - TopChatIndex;
-    
+
     public ObservableCollection<Chat> Chats { get; } = new();
     public List<Chat> SortedChats { get; } = new();
     public Dictionary<long, Chat> ChatsDict { get; } = new();
@@ -109,6 +111,7 @@ public class Folder
 public class Model
 {
     private readonly IRenderer _renderer;
+    private readonly TgCliSettings _settings;
     private readonly List<Folder> _folders = new();
 
     private bool _muteChanneldByDefault;
@@ -125,9 +128,10 @@ public class Model
 
     public event Action<VisibleInterface> RenderRequested;
 
-    public Model(IRenderer renderer)
+    public Model(IRenderer renderer, TgCliSettings settings)
     {
         _renderer = renderer;
+        _settings = settings;
         _folders.Add(new Folder(-1, "All chats"));
     }
 
@@ -180,10 +184,35 @@ public class Model
 
                 if (folder != SelectedFolder)
                     return;
-                    
+
                 var sortedIndex = folder.SortedChats.IndexOf(chat);
                 if (sortedIndex > VisibleChatsCount - 1)
                     return;
+                break;
+            }
+
+            case TdApi.Update.UpdateChatLastMessage updateChatLastMessage:
+            {
+                var lastMessagePreview = updateChatLastMessage?.LastMessage?.Content switch
+                {
+                    TdApi.MessageContent.MessageText mt => mt.Text.Text,
+                    TdApi.MessageContent.MessagePhoto => "Photo",
+                    TdApi.MessageContent.MessageAudio => "Audio",
+                    TdApi.MessageContent.MessageVideo => "Video",
+                    TdApi.MessageContent.MessageVoiceNote => "Voice message",
+                    TdApi.MessageContent.MessageVideoNote => "Video message",
+                    TdApi.MessageContent.MessageDocument => "Document",
+                    TdApi.MessageContent.MessageSticker => "Sticker",
+                    null => "<null>",
+                    _ => updateChatLastMessage.LastMessage.Content.DataType
+                };
+
+                lastMessagePreview = Utils.RemoveNonUtf16Characters(lastMessagePreview);
+
+                if (!AllChatsFolder.ChatsDict.TryGetValue(updateChatLastMessage.ChatId, out var chat))
+                    return; // TODO
+
+                chat.LastMessagePreview = lastMessagePreview;
                 break;
             }
 
@@ -232,30 +261,54 @@ public class Model
 
     public void OnListenerCommandReceived(Command command)
     {
-        switch (command)
+        switch (command.Type)
         {
-            case Command.MoveDown:
+            case CommandType.MoveDown:
                 SelectChatAt(SelectedFolder.SelectedChatIndex + 1);
                 break;
 
-            case Command.MoveUp:
+            case CommandType.MoveUp:
                 SelectChatAt(SelectedFolder.SelectedChatIndex - 1);
                 break;
 
-            case Command.MoveToTop:
+            case CommandType.MoveToTop:
                 SelectChatAt(0);
                 break;
 
-            case Command.MoveToBottom:
+            case CommandType.MoveToBottom:
                 SelectChatAt(SelectedFolder.Chats.Count - 1);
                 break;
 
-            case Command.NextFolder:
+            case CommandType.NextFolder:
                 SelectFolderAt(_selectedFolderIndex + 1);
                 break;
 
-            case Command.PreviousFolder:
+            case CommandType.PreviousFolder:
                 SelectFolderAt(_selectedFolderIndex - 1);
+                break;
+                
+            case CommandType.SelectFolder:
+                if (!int.TryParse(command.Parameter, out var index))
+                    return;
+                    
+                if (index > _folders.Count - 1)
+                    index = _folders.Count - 1;
+                    
+                SelectFolderAt(index);
+                break;
+                
+            case CommandType.LastFolder:
+                SelectFolderAt(_folders.Count - 1);
+                break;
+                
+            case CommandType.MoveSeparatorToLeft:
+                _settings.SeparatorOffset -= 1;
+                RequestRender();
+                break;
+                
+            case CommandType.MoveSeparatorToRight:
+                _settings.SeparatorOffset += 1;
+                RequestRender();
                 break;
         }
     }
@@ -307,9 +360,11 @@ public class Model
     private void RequestRender()
     {
         var count = Math.Min(SelectedFolder.SortedChats.Count, VisibleChatsCount);
-        IReadOnlyList<Chat> visibleChats = count > 0 ? SelectedFolder.SortedChats.GetRange(SelectedFolder.TopChatIndex, count) : Array.Empty<Chat>();
-        var visibleInterface = new VisibleInterface(visibleChats, SelectedFolder.RelativeSelectedChatIndex, _commandInput, _folders,
-            _selectedFolderIndex);
+        IReadOnlyList<Chat> visibleChats = count > 0
+            ? SelectedFolder.SortedChats.GetRange(SelectedFolder.TopChatIndex, count)
+            : Array.Empty<Chat>();
+        var visibleInterface = new VisibleInterface(visibleChats, SelectedFolder.RelativeSelectedChatIndex,
+            _commandInput, _folders, _selectedFolderIndex);
 
         RenderRequested?.Invoke(visibleInterface);
     }

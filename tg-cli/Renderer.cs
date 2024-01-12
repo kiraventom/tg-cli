@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Newtonsoft.Json;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -23,19 +24,32 @@ public class Renderer : IRenderer
     private const int TabsHeight = 1;
 
     private readonly IAnsiConsole _console;
+    private readonly TgCliSettings _settings;
 
     private int ConsoleWidthWithoutBorders => _console.Profile.Width - 1 - 1 - 1;
     private int ConsoleHeightWithoutBorders => _console.Profile.Height - 1 - 1 - 1 - 1;
 
-    private int ChatWidth => (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
+    private int ChatWidth
+    {
+        get 
+        { 
+            var defaultChatWidth = (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
+            if (Math.Abs(_settings.SeparatorOffset) < defaultChatWidth)
+                return defaultChatWidth - _settings.SeparatorOffset;
+                
+            return 0;
+        }
+    }
+
     private int ChatListWidth => ConsoleWidthWithoutBorders - ChatWidth;
 
-    public int MaxVisibleChatsCount => ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight -
-                                       CommandsInputHeight - TabsHeight;
+    public int MaxVisibleChatsCount => (ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight -
+                                        CommandsInputHeight - TabsHeight) / 2;
 
-    public Renderer(IAnsiConsole console)
+    public Renderer(IAnsiConsole console, TgCliSettings settings)
     {
         _console = console;
+        _settings = settings;
     }
 
     public void OnRenderRequested(VisibleInterface visibleInterface)
@@ -53,6 +67,7 @@ public class Renderer : IRenderer
 
         for (var i = 0; i < MaxVisibleChatsCount - visibleInterface.Chats.Count; ++i)
         {
+            chatListLayout.AddRow(" ");
             chatListLayout.AddRow(" ");
         }
 
@@ -96,13 +111,13 @@ public class Renderer : IRenderer
             var markup = i == selectedFolderIndex ? $"[underline]{folder.Title}[/]" : $"{folder.Title}";
 
             sb.Append(markup);
-            
+
             var unreadChats = folder.Chats.Where(c => c.UnreadCount > 0).ToList();
             var color = unreadChats.All(c => c.IsMuted) ? MutedUnreadColor : UnreadColor;
             var unreadChatsCount = unreadChats.Count;
             if (unreadChatsCount > 0)
                 sb.Append($" [{color}][[{unreadChatsCount}]][/]");
-                
+
             if (i != folders.Count - 1)
                 sb.Append(" | ");
         }
@@ -144,7 +159,25 @@ public class Renderer : IRenderer
         currentUnreadColor += isSelected ? " invert" : string.Empty;
         var unreadMarkup = string.Format(unreadMarkupTemplate, currentUnreadColor, unreadText);
 
+        var lastMessagePreview = "<empty>";
+        if (chat.LastMessagePreview is not null)
+        {
+            const int guideWidth = 4;
+            var previewMessageWidth = ChatListWidth - guideWidth;
+            var lastMessageLines = chat.LastMessagePreview.Split('\n');
+            lastMessagePreview = lastMessageLines[0].EscapeMarkup();
+            if (lastMessagePreview.Length > previewMessageWidth)
+            {
+                lastMessagePreview = previewMessageWidth < 1
+                    ? ellipsis.ToString()
+                    : lastMessagePreview[..(previewMessageWidth - 1)] + ellipsis;
+            }
+        }
+
         var markup = $"{titleMarkup}{unreadMarkup}";
-        return new Markup(markup);
+        var tree = new Tree(new Markup(markup)) { Style = new Style(null, null, Decoration.Dim) };
+        tree.AddNode(new Markup(lastMessagePreview, new Style(null, null, Decoration.Dim)));
+
+        return tree;
     }
 }

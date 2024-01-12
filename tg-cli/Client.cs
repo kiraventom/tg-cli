@@ -1,17 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Text;
-using SettingsManagement;
 using TdLib;
 
 namespace tg_cli;
-
-#pragma warning disable CS0169
-
-public partial class TgCliSettings : ISettings
-{
-}
-
-#pragma warning restore CS0169
 
 public class Client
 {

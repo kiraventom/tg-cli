@@ -34,8 +34,8 @@ public static class Program
         var client = new Client(settings);
         var authorizer = new Authorizer(ansiConsole);
         var inputListener = new InputListener(ansiConsole);
-        var renderer = new Renderer(ansiConsole);
-        var model = new Model(renderer);
+        var renderer = new Renderer(ansiConsole, settings);
+        var model = new Model(renderer, settings);
         client.UpdateReceived += authorizer.OnClientUpdateReceived;
         client.UpdateReceived += model.OnClientUpdateReceived;
         inputListener.CommandReceived += model.OnListenerCommandReceived;

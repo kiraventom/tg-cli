@@ -3,22 +3,43 @@ using Spectre.Console;
 
 namespace tg_cli;
 
-public enum Command
+public enum CommandType
 {
-    None,
     Quit,
     MoveUp,
     MoveDown,
     MoveToTop,
     MoveToBottom,
     NextFolder,
-    PreviousFolder
+    PreviousFolder,
+    SelectFolder,
+    LastFolder,
+    MoveSeparatorToLeft,
+    MoveSeparatorToRight,
+}
+
+public class Command
+{
+    public CommandType Type { get; }
+    public string Parameter { get; }
+
+    public Command(CommandType type)
+    {
+        Type = type;
+    }
+
+    public Command(CommandType type, string parameter) : this(type)
+    {
+        Parameter = parameter;
+    }
 }
 
 public class InputListener
 {
     private readonly IAnsiConsole _console;
     private readonly StringBuilder _inputBuilder = new();
+    
+    private readonly CancellationTokenSource _cts = new();
 
     public event Action<string> InputReceived;
     public event Action<Command> CommandReceived;
@@ -26,21 +47,34 @@ public class InputListener
     public InputListener(IAnsiConsole console)
     {
         _console = console;
+        CommandReceived += OnCommandReceived;
     }
 
     public async Task StartListen()
     {
         while (true)
         {
-            var cki = await _console.Input.ReadKeyAsync(true, CancellationToken.None);
-            if (cki!.Value.Key == ConsoleKey.Escape)
+            var readKeyResult = await _console.Input.ReadKeyAsync(true, _cts.Token);
+            if (readKeyResult is null)
+                return;
+                
+            var cki = readKeyResult!.Value;
+            
+            if (cki.Key == ConsoleKey.Escape)
             {
                 _inputBuilder.Clear();
                 InputReceived?.Invoke(string.Empty);
                 continue;
             }
 
-            _inputBuilder.Append(cki!.Value.KeyChar);
+            var newInput = cki.Modifiers switch
+            {
+                ConsoleModifiers.Control => $"<C-{cki.Key.ToString().ToLower()}>",
+                ConsoleModifiers.Alt => $"<A-{cki.Key.ToString().ToLower()}>",
+                _ => cki.KeyChar.ToString()
+            };
+            
+            _inputBuilder.Append(newInput);
             var input = _inputBuilder.ToString();
             var isCommand = TryParseCommand(input, out var command);
             if (!isCommand)
@@ -51,28 +85,64 @@ public class InputListener
 
             _inputBuilder.Clear();
             InputReceived?.Invoke(string.Empty);
-            
-            if (command == Command.Quit)
-                return;
-                
             CommandReceived?.Invoke(command);
+        }
+    }
+
+    private void OnCommandReceived(Command command)
+    {
+        switch (command.Type)
+        {
+            case CommandType.Quit:
+                _cts.Cancel();
+                break;
         }
     }
 
     private static bool TryParseCommand(string input, out Command command)
     {
+        input = ApplyTemplate(input, out var parameter);
+        
         command = input switch
         {
-            "q" => Command.Quit,
-            "j" => Command.MoveDown,
-            "k" => Command.MoveUp,
-            "gg" => Command.MoveToTop,
-            "G" => Command.MoveToBottom,
-            "gt" => Command.NextFolder,
-            "gT" => Command.PreviousFolder,
-            _ => Command.None
+            "q" => new Command(CommandType.Quit),
+            "j" => new Command(CommandType.MoveDown),
+            "k" => new Command(CommandType.MoveUp),
+            "gg" => new Command(CommandType.MoveToTop),
+            "G" => new Command(CommandType.MoveToBottom),
+            "gt" => new Command(CommandType.NextFolder),
+            "gT" => new Command(CommandType.PreviousFolder),
+            "g%t" when parameter == "$" => new Command(CommandType.LastFolder),
+            "g%t" => new Command(CommandType.SelectFolder, parameter),
+            "<C-w>h" => new Command(CommandType.MoveSeparatorToLeft),
+            "<C-w>l" => new Command(CommandType.MoveSeparatorToRight),
+            _ => null
         };
-
-        return command != Command.None;
+        
+        return command is not null;
+    }
+    
+    private static string ApplyTemplate(string input, out string parameter)
+    {
+        parameter = string.Empty;
+        
+        var templates = new[] { "g%t" };
+        foreach (var template in templates)
+        {
+            var index = template.IndexOf('%');
+            var start = template[..index];
+            var end = template[(index + 1)..];
+            
+            if (input.StartsWith(start) && input.EndsWith(end))
+            {
+                parameter = input[start.Length..^end.Length];
+                if (parameter.Length < 1)
+                    continue;
+                    
+                input = template;
+            }
+        }
+        
+        return input;
     }
 }
