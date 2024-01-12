@@ -6,15 +6,20 @@ namespace tg_cli;
 
 public struct VisibleInterface
 {
+    public IReadOnlyList<Folder> Folders { get; }
+    public int SelectedFolderIndex { get; }
     public IReadOnlyList<Chat> Chats { get; }
-    public int SelectedIndex { get; }
+    public int SelectedChatIndex { get; }
     public string CommandInput { get; }
 
-    public VisibleInterface(IReadOnlyList<Chat> chats, int selectedIndex, string commandInput)
+    public VisibleInterface(IReadOnlyList<Chat> chats, int selectedChatIndex, string commandInput,
+        IReadOnlyList<Folder> folders, int selectedFolderIndex)
     {
         Chats = chats;
-        SelectedIndex = selectedIndex;
+        SelectedChatIndex = selectedChatIndex;
         CommandInput = commandInput;
+        Folders = folders;
+        SelectedFolderIndex = selectedFolderIndex;
     }
 }
 
@@ -22,10 +27,11 @@ public class Chat
 {
     public class Comparer : IComparer<Chat>
     {
-        public static Comparer Instance { get; } = new();
+        private readonly Folder _folder;
 
-        private Comparer()
+        public Comparer(Folder folder)
         {
+            _folder = folder;
         }
 
         public int Compare(Chat x, Chat y)
@@ -33,12 +39,14 @@ public class Chat
             if (ReferenceEquals(x, y)) return 0;
             if (ReferenceEquals(null, y)) return 1;
             if (ReferenceEquals(null, x)) return -1;
-            return y.Position.CompareTo(x.Position);
+            x.Positions.TryGetValue(_folder, out var xPosition);
+            y.Positions.TryGetValue(_folder, out var yPosition);
+            return yPosition.CompareTo(xPosition);
         }
     }
 
     public long Id { get; }
-    public long Position { get; set; }
+    public Dictionary<Folder, long> Positions { get; } = new();
     public string Title { get; set; }
     public int UnreadCount { get; set; }
     public bool IsMuted { get; set; }
@@ -51,37 +59,82 @@ public class Chat
     }
 }
 
+public class Folder
+{
+    public int TopChatIndex { get; set; }
+    public int SelectedChatIndex { get; set; }
+    public int RelativeSelectedChatIndex => SelectedChatIndex - TopChatIndex;
+    
+    public ObservableCollection<Chat> Chats { get; } = new();
+    public List<Chat> SortedChats { get; } = new();
+    public Dictionary<long, Chat> ChatsDict { get; } = new();
+
+    public long Id { get; }
+    public string Title { get; }
+
+    public Folder(long id, string title)
+    {
+        Id = id;
+        Title = title;
+        Chats.CollectionChanged += OnChatsCollectionChanged;
+    }
+
+    private void OnChatsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                var newChat = e.NewItems!.OfType<Chat>().Single();
+                SortedChats.Add(newChat);
+                SortedChats.Sort(new Chat.Comparer(this));
+                ChatsDict.Add(newChat.Id, newChat);
+                break;
+
+            case NotifyCollectionChangedAction.Remove:
+                var oldChat = e.OldItems!.OfType<Chat>().Single();
+                SortedChats.Remove(oldChat);
+                SortedChats.Sort(new Chat.Comparer(this));
+                ChatsDict.Remove(oldChat.Id);
+                break;
+
+            case NotifyCollectionChangedAction.Replace:
+            case NotifyCollectionChangedAction.Move:
+            case NotifyCollectionChangedAction.Reset:
+            default:
+                throw new NotSupportedException($"{e.Action} is not expected");
+        }
+    }
+}
+
 public class Model
 {
     private readonly IRenderer _renderer;
-    
-    private readonly ObservableCollection<Chat> _chats = new();
-    private readonly List<Chat> _sortedChats = new();
-    private readonly Dictionary<long, Chat> _chatsDict = new();
-    
+    private readonly List<Folder> _folders = new();
+
     private bool _muteChanneldByDefault;
 
-    private int _topChatIndex;
-    private int _selectedChatIndex;
+    private int _selectedFolderIndex;
 
     private string _commandInput = string.Empty;
 
-    private int VisibleChatsCount => _renderer.VisibleChatsCount;
-    private int BottomChatIndex => _topChatIndex + VisibleChatsCount - 1;
-    private int RelativeSelectedChatIndex => _selectedChatIndex - _topChatIndex;
+    private Folder AllChatsFolder => _folders[0];
+    private Folder SelectedFolder => _folders[_selectedFolderIndex];
+
+    private int BottomChatIndex => SelectedFolder.TopChatIndex + VisibleChatsCount - 1;
+    private int VisibleChatsCount => _renderer.MaxVisibleChatsCount;
 
     public event Action<VisibleInterface> RenderRequested;
 
     public Model(IRenderer renderer)
     {
         _renderer = renderer;
-        _chats.CollectionChanged += OnChatsCollectionChanged;
+        _folders.Add(new Folder(-1, "All chats"));
     }
 
-    public async void OnClientUpdateReceived(object sender, TdApi.Update update)
+    public void OnClientUpdateReceived(object sender, TdApi.Update update)
     {
-        Program.Logger.LogUpdate(update, _chatsDict);
-        
+        Program.Logger.LogUpdate(update, AllChatsFolder.ChatsDict);
+
         switch (update)
         {
             case TdApi.Update.UpdateNewChat updateNewChat:
@@ -92,50 +145,81 @@ public class Model
                 {
                     UnreadCount = chat.UnreadCount,
                 };
-                
+
                 if (!newChat.IsPrivate)
                     newChat.IsMuted = _muteChanneldByDefault;
 
-                _chats.Add(newChat);
-                if (_chats.Count - 1 > VisibleChatsCount)
+                AllChatsFolder.Chats.Add(newChat);
+
+                if (SelectedFolder.Chats.Count - 1 > VisibleChatsCount)
                     return;
-                break;
+                return;
             }
 
             case TdApi.Update.UpdateChatPosition updateChatPosition:
             {
-                if (updateChatPosition.Position.List.DataType != "chatListMain")
+                var folder = updateChatPosition.Position.List switch
+                {
+                    TdApi.ChatList.ChatListFolder chatListFolder =>
+                        _folders.First(f => f.Id == chatListFolder.ChatFolderId),
+                    TdApi.ChatList.ChatListMain => AllChatsFolder,
+                    TdApi.ChatList.ChatListArchive => null, // TODO
+                    _ => throw new NotSupportedException()
+                };
+
+                if (folder is null)
                     return;
 
-                if (!_chatsDict.TryGetValue(updateChatPosition.ChatId, out var chat))
-                    return; // TODO
+                if (!folder.ChatsDict.TryGetValue(updateChatPosition.ChatId, out var chat))
+                {
+                    chat = AllChatsFolder.ChatsDict[updateChatPosition.ChatId];
+                    folder.Chats.Add(chat);
+                }
 
-                chat.Position = updateChatPosition.Position.Order;
+                chat.Positions[folder] = updateChatPosition.Position.Order;
+
+                if (folder != SelectedFolder)
+                    return;
+                    
+                var sortedIndex = folder.SortedChats.IndexOf(chat);
+                if (sortedIndex > VisibleChatsCount - 1)
+                    return;
                 break;
             }
 
             case TdApi.Update.UpdateChatReadInbox updateChatReadInbox:
             {
-                if (!_chatsDict.TryGetValue(updateChatReadInbox.ChatId, out var chat))
+                if (!AllChatsFolder.ChatsDict.TryGetValue(updateChatReadInbox.ChatId, out var chat))
                     return; // TODO
 
                 chat.UnreadCount = updateChatReadInbox.UnreadCount;
                 break;
             }
-            
+
             case TdApi.Update.UpdateScopeNotificationSettings updateScopeNotificationSettings:
-            {   
+            {
                 _muteChanneldByDefault = updateScopeNotificationSettings.NotificationSettings.MuteFor != 0;
                 return;
             }
 
             case TdApi.Update.UpdateChatNotificationSettings updateChatNotificationSettings:
             {
-                if (!_chatsDict.TryGetValue(updateChatNotificationSettings.ChatId, out var chat))
+                if (!AllChatsFolder.ChatsDict.TryGetValue(updateChatNotificationSettings.ChatId, out var chat))
                     return; // TODO
-                    
+
                 if (!updateChatNotificationSettings.NotificationSettings.UseDefaultMuteFor)
                     chat.IsMuted = updateChatNotificationSettings.NotificationSettings.MuteFor != 0;
+                break;
+            }
+
+            case TdApi.Update.UpdateChatFolders updateChatFolders:
+            {
+                foreach (var chatFolderInfo in updateChatFolders.ChatFolders)
+                {
+                    var folder = new Folder(chatFolderInfo.Id, chatFolderInfo.Title);
+                    _folders.Add(folder);
+                }
+
                 break;
             }
 
@@ -151,19 +235,27 @@ public class Model
         switch (command)
         {
             case Command.MoveDown:
-                SelectIndex(_selectedChatIndex + 1);
+                SelectChatAt(SelectedFolder.SelectedChatIndex + 1);
                 break;
 
             case Command.MoveUp:
-                SelectIndex(_selectedChatIndex - 1);
+                SelectChatAt(SelectedFolder.SelectedChatIndex - 1);
                 break;
 
             case Command.MoveToTop:
-                SelectIndex(0);
+                SelectChatAt(0);
                 break;
 
             case Command.MoveToBottom:
-                SelectIndex(_chats.Count - 1);
+                SelectChatAt(SelectedFolder.Chats.Count - 1);
+                break;
+
+            case Command.NextFolder:
+                SelectFolderAt(_selectedFolderIndex + 1);
+                break;
+
+            case Command.PreviousFolder:
+                SelectFolderAt(_selectedFolderIndex - 1);
                 break;
         }
     }
@@ -174,59 +266,51 @@ public class Model
         RequestRender();
     }
 
-    private void SelectIndex(int index)
+    private void SelectChatAt(int index)
     {
         if (index < 0)
             index = 0;
 
-        if (index > _chats.Count - 1)
-            index = _chats.Count - 1;
+        if (index > SelectedFolder.Chats.Count - 1)
+            index = SelectedFolder.Chats.Count - 1;
 
-        if (index == _selectedChatIndex)
+        if (index == SelectedFolder.SelectedChatIndex)
             return;
 
-        _selectedChatIndex = index;
+        SelectedFolder.SelectedChatIndex = index;
 
-        if (_selectedChatIndex < _topChatIndex)
-            _topChatIndex = _selectedChatIndex;
+        if (SelectedFolder.SelectedChatIndex < SelectedFolder.TopChatIndex)
+            SelectedFolder.TopChatIndex = SelectedFolder.SelectedChatIndex;
 
-        if (_selectedChatIndex > BottomChatIndex)
-            _topChatIndex = _selectedChatIndex - (VisibleChatsCount - 1);
+        if (SelectedFolder.SelectedChatIndex > BottomChatIndex)
+            SelectedFolder.TopChatIndex = SelectedFolder.SelectedChatIndex - (VisibleChatsCount - 1);
+
+        RequestRender();
+    }
+
+    private void SelectFolderAt(int index)
+    {
+        if (index < 0)
+            index = _folders.Count - 1;
+
+        if (index > _folders.Count - 1)
+            index = 0;
+
+        if (index == _selectedFolderIndex)
+            return;
+
+        _selectedFolderIndex = index;
 
         RequestRender();
     }
 
     private void RequestRender()
     {
-        var count = Math.Min(_sortedChats.Count, VisibleChatsCount);
-        var visibleChats = _sortedChats.GetRange(_topChatIndex, count);
-        var visibleInterface = new VisibleInterface(visibleChats, RelativeSelectedChatIndex, _commandInput);
+        var count = Math.Min(SelectedFolder.SortedChats.Count, VisibleChatsCount);
+        IReadOnlyList<Chat> visibleChats = count > 0 ? SelectedFolder.SortedChats.GetRange(SelectedFolder.TopChatIndex, count) : Array.Empty<Chat>();
+        var visibleInterface = new VisibleInterface(visibleChats, SelectedFolder.RelativeSelectedChatIndex, _commandInput, _folders,
+            _selectedFolderIndex);
+
         RenderRequested?.Invoke(visibleInterface);
-    }
-
-    private void OnChatsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
-    {
-        switch (e.Action)
-        {
-            case NotifyCollectionChangedAction.Add:
-                var newChat = e.NewItems!.OfType<Chat>().Single();
-                _sortedChats.Add(newChat);
-                _sortedChats.Sort(Chat.Comparer.Instance);
-                _chatsDict.Add(newChat.Id, newChat);
-                break;
-
-            case NotifyCollectionChangedAction.Remove:
-                var oldChat = e.OldItems!.OfType<Chat>().Single();
-                _sortedChats.Remove(oldChat);
-                _sortedChats.Sort(Chat.Comparer.Instance);
-                _chatsDict.Remove(oldChat.Id);
-                break;
-
-            case NotifyCollectionChangedAction.Replace:
-            case NotifyCollectionChangedAction.Move:
-            case NotifyCollectionChangedAction.Reset:
-            default:
-                throw new NotSupportedException($"{e.Action} is not expected");
-        }
     }
 }

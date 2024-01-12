@@ -1,11 +1,12 @@
-﻿using Spectre.Console;
+﻿using System.Text;
+using Spectre.Console;
 using Spectre.Console.Rendering;
 
 namespace tg_cli;
 
 public interface IRenderer
 {
-    public int VisibleChatsCount { get; }
+    public int MaxVisibleChatsCount { get; }
 }
 
 public class Renderer : IRenderer
@@ -13,6 +14,10 @@ public class Renderer : IRenderer
     private const double ChatListWidthMod = 0.2;
     private const double ChatWidthMod = 1 - ChatListWidthMod;
     private const int UnreadCounterWidth = 3;
+
+    private const int StupidFuckingLineOnBottomHeight = 1;
+    private const int CommandsInputHeight = 1;
+    private const int TabsHeight = 1;
 
     private readonly IAnsiConsole _console;
 
@@ -22,7 +27,8 @@ public class Renderer : IRenderer
     private int ChatWidth => (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
     private int ChatListWidth => ConsoleWidthWithoutBorders - ChatWidth;
 
-    public int VisibleChatsCount => ConsoleHeightWithoutBorders - 1 - 1;
+    public int MaxVisibleChatsCount => ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight -
+                                       CommandsInputHeight - TabsHeight;
 
     public Renderer(IAnsiConsole console)
     {
@@ -31,15 +37,20 @@ public class Renderer : IRenderer
 
     public void OnRenderRequested(VisibleInterface visibleInterface)
     {
-        var chatListTable = new Table {Border = TableBorder.None, ShowHeaders = false};
-        chatListTable.AddColumn(string.Empty);
-        chatListTable.Columns[0].Padding(0, 0);
+        var chatListLayout = new Table {Border = TableBorder.None, ShowHeaders = false};
+        chatListLayout.AddColumn(string.Empty);
+        chatListLayout.Columns[0].Padding(0, 0);
 
         for (var i = 0; i < visibleInterface.Chats.Count; ++i)
         {
             var chat = visibleInterface.Chats[i];
-            var chatMarkup = MarkupChat(chat, i == visibleInterface.SelectedIndex);
-            chatListTable.AddRow(chatMarkup);
+            var chatMarkup = MarkupChat(chat, i == visibleInterface.SelectedChatIndex);
+            chatListLayout.AddRow(chatMarkup);
+        }
+
+        for (var i = 0; i < MaxVisibleChatsCount - visibleInterface.Chats.Count; ++i)
+        {
+            chatListLayout.AddRow(" ");
         }
 
         var chatPanel = new Markup("Messages here")
@@ -47,20 +58,34 @@ public class Renderer : IRenderer
             Justification = Justify.Center
         };
 
-        var messengerTable = new Table {Border = TableBorder.Rounded};
+        var messengerTable = new Table {Border = TableBorder.Square};
         messengerTable.AddColumn("Chats list");
         messengerTable.Columns[0].Width = ChatListWidth;
         messengerTable.Columns[0].Alignment = Justify.Left;
 
-        var selectedChat = visibleInterface.Chats[visibleInterface.SelectedIndex];
-        messengerTable.AddColumn(selectedChat.Title.EscapeMarkup());
-        messengerTable.Columns[1].Width = ChatWidth;
+        var selectedChat = visibleInterface.SelectedChatIndex < visibleInterface.Chats.Count
+            ? visibleInterface.Chats[visibleInterface.SelectedChatIndex]
+            : null;
 
-        messengerTable.AddRow(chatListTable, chatPanel);
+        messengerTable.AddColumn(selectedChat?.Title?.EscapeMarkup() ?? string.Empty);
+        messengerTable.Columns[1].Width = ChatWidth;
+        messengerTable.AddRow(chatListLayout, chatPanel);
+
+        StringBuilder sb = new(" ");
+        for (var i = 0; i < visibleInterface.Folders.Count; ++i)
+        {
+            var folder = visibleInterface.Folders[i];
+            var markup = i == visibleInterface.SelectedFolderIndex ? $"[underline]{folder.Title}[/]" : $"{folder.Title}";
+
+            sb.Append(markup);
+            if (i != visibleInterface.Folders.Count - 1)
+                sb.Append(" | ");
+        }
 
         var mainTable = new Table {Border = TableBorder.None, ShowHeaders = false};
         mainTable.AddColumn(string.Empty);
         mainTable.Columns[0].Padding(0, 0);
+        mainTable.AddRow(sb.ToString());
         mainTable.AddRow(messengerTable);
         mainTable.AddRow(visibleInterface.CommandInput);
 
@@ -88,13 +113,13 @@ public class Renderer : IRenderer
         {
             title += new string(' ', chatTitleWidth - chat.Title.Length);
         }
-        
+
         const string titleMarkupTemplate = "{0}";
         const string selectedTitleMarkupTemplate = $"[invert]{titleMarkupTemplate}[/]";
         const string unreadColor = "blue";
         const string mutedUnreadColor = "gray";
         const string unreadMarkupTemplate = "[{0}] {1}[/]";
-        
+
         var currentTitleMarkupTemplate = isSelected ? selectedTitleMarkupTemplate : titleMarkupTemplate;
         var escapedTitle = title.EscapeMarkup();
         var titleMarkup = string.Format(currentTitleMarkupTemplate, escapedTitle);
@@ -102,7 +127,7 @@ public class Renderer : IRenderer
         var currentUnreadColor = chat.IsMuted ? mutedUnreadColor : unreadColor;
         currentUnreadColor += isSelected ? " invert" : string.Empty;
         var unreadMarkup = string.Format(unreadMarkupTemplate, currentUnreadColor, unreadText);
-        
+
         var markup = $"{titleMarkup}{unreadMarkup}";
         return new Markup(markup);
     }

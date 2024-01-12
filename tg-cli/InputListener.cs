@@ -1,6 +1,5 @@
 ﻿using System.Text;
 using Spectre.Console;
-using TdLib;
 
 namespace tg_cli;
 
@@ -11,7 +10,9 @@ public enum Command
     MoveUp,
     MoveDown,
     MoveToTop,
-    MoveToBottom
+    MoveToBottom,
+    NextFolder,
+    PreviousFolder
 }
 
 public class InputListener
@@ -67,6 +68,8 @@ public class InputListener
             "k" => Command.MoveUp,
             "gg" => Command.MoveToTop,
             "G" => Command.MoveToBottom,
+            "gt" => Command.NextFolder,
+            "gT" => Command.PreviousFolder,
             _ => Command.None
         };
 
