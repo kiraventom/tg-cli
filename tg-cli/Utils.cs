@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-namespace tg_cli;
+﻿namespace tg_cli;
 
 public static class Utils
 {

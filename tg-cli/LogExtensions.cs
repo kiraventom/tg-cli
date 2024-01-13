@@ -47,15 +47,13 @@ public static class LogExtensions
 
             case TdApi.Update.UpdateChatLastMessage updateChatLastMessage:
             {
-                var messageContentType = updateChatLastMessage?.LastMessage?.Content switch
-                {
-                    TdApi.MessageContent.MessageText mt => mt.Text.Text,
-                    null => "<null>",
-                    _ => updateChatLastMessage.LastMessage.Content.DataType
-                };
+                var content = updateChatLastMessage?.LastMessage?.Content?.GetContentString();
 
-                logger.Information("Chat last message: '{content}' ({titleAndId})", messageContentType,
-                    GetChatTitleAndId(updateChatLastMessage.ChatId, chatsDict));
+                var positions = updateChatLastMessage.Positions.Select(p => p.Order + " in " + p.List.DataType);
+                var positionsStr = string.Join(", ", positions);
+
+                logger.Information("Chat last message: '{content}', Positions={positions} ({titleAndId})",
+                    content, positionsStr, GetChatTitleAndId(updateChatLastMessage.ChatId, chatsDict));
                 break;
             }
 
@@ -164,5 +162,34 @@ public static class LogExtensions
             return idStr;
 
         return title + ' ' + idStr;
+    }
+}
+
+public static class TgCliExtensions
+{
+    public static string GetContentString(this TdApi.MessageContent messageContent)
+    {
+        var contentStr = messageContent switch
+        {
+            TdApi.MessageContent.MessageText mt => mt.Text.Text,
+            TdApi.MessageContent.MessagePhoto => "Photo",
+            TdApi.MessageContent.MessageAudio => "Audio",
+            TdApi.MessageContent.MessageVideo => "Video",
+            TdApi.MessageContent.MessageVoiceNote => "Voice message",
+            TdApi.MessageContent.MessageVideoNote => "Video message",
+            TdApi.MessageContent.MessageDocument => "Document",
+            TdApi.MessageContent.MessageSticker => "Sticker",
+            TdApi.MessageContent.MessageAnimatedEmoji e => e.Emoji,
+            null => "<null>",
+            _ => messageContent.DataType
+        };
+
+        var isMessageEmpty = string.IsNullOrEmpty(contentStr);
+        contentStr = Utils.RemoveNonUtf16Characters(contentStr);
+
+        if (string.IsNullOrEmpty(contentStr))
+            contentStr = isMessageEmpty ? "<empty>" : "<non utf-16>";
+
+        return contentStr;
     }
 }

@@ -1,0 +1,491 @@
+diff --git a/tg-cli/Client.cs b/tg-cli/Client.cs
+index 4fa94ce..97b0561 100644
+--- a/tg-cli/Client.cs
++++ b/tg-cli/Client.cs
+@@ -1,18 +1,9 @@
+ using System.Runtime.InteropServices;
+ using System.Text;
+-using SettingsManagement;
+ using TdLib;
+ 
+ namespace tg_cli;
+ 
+-#pragma warning disable CS0169
+-
+-public partial class TgCliSettings : ISettings
+-{
+-}
+-
+-#pragma warning restore CS0169
+-
+ public class Client
+ {
+     private readonly TgCliSettings _settings;
+diff --git a/tg-cli/InputListener.cs b/tg-cli/InputListener.cs
+index 1af2419..90dbb31 100644
+--- a/tg-cli/InputListener.cs
++++ b/tg-cli/InputListener.cs
+@@ -3,22 +3,43 @@ using Spectre.Console;
+ 
+ namespace tg_cli;
+ 
+-public enum Command
++public enum CommandType
+ {
+-    None,
+     Quit,
+     MoveUp,
+     MoveDown,
+     MoveToTop,
+     MoveToBottom,
+     NextFolder,
+-    PreviousFolder
++    PreviousFolder,
++    SelectFolder,
++    LastFolder,
++    MoveSeparatorToLeft,
++    MoveSeparatorToRight,
++}
++
++public class Command
++{
++    public CommandType Type { get; }
++    public string Parameter { get; }
++
++    public Command(CommandType type)
++    {
++        Type = type;
++    }
++
++    public Command(CommandType type, string parameter) : this(type)
++    {
++        Parameter = parameter;
++    }
+ }
+ 
+ public class InputListener
+ {
+     private readonly IAnsiConsole _console;
+     private readonly StringBuilder _inputBuilder = new();
++    
++    private readonly CancellationTokenSource _cts = new();
+ 
+     public event Action<string> InputReceived;
+     public event Action<Command> CommandReceived;
+@@ -26,21 +47,34 @@ public class InputListener
+     public InputListener(IAnsiConsole console)
+     {
+         _console = console;
++        CommandReceived += OnCommandReceived;
+     }
+ 
+     public async Task StartListen()
+     {
+         while (true)
+         {
+-            var cki = await _console.Input.ReadKeyAsync(true, CancellationToken.None);
+-            if (cki!.Value.Key == ConsoleKey.Escape)
++            var readKeyResult = await _console.Input.ReadKeyAsync(true, _cts.Token);
++            if (readKeyResult is null)
++                return;
++                
++            var cki = readKeyResult!.Value;
++            
++            if (cki.Key == ConsoleKey.Escape)
+             {
+                 _inputBuilder.Clear();
+                 InputReceived?.Invoke(string.Empty);
+                 continue;
+             }
+ 
+-            _inputBuilder.Append(cki!.Value.KeyChar);
++            var newInput = cki.Modifiers switch
++            {
++                ConsoleModifiers.Control => $"<C-{cki.Key.ToString().ToLower()}>",
++                ConsoleModifiers.Alt => $"<A-{cki.Key.ToString().ToLower()}>",
++                _ => cki.KeyChar.ToString()
++            };
++            
++            _inputBuilder.Append(newInput);
+             var input = _inputBuilder.ToString();
+             var isCommand = TryParseCommand(input, out var command);
+             if (!isCommand)
+@@ -51,28 +85,64 @@ public class InputListener
+ 
+             _inputBuilder.Clear();
+             InputReceived?.Invoke(string.Empty);
+-            
+-            if (command == Command.Quit)
+-                return;
+-                
+             CommandReceived?.Invoke(command);
+         }
+     }
+ 
++    private void OnCommandReceived(Command command)
++    {
++        switch (command.Type)
++        {
++            case CommandType.Quit:
++                _cts.Cancel();
++                break;
++        }
++    }
++
+     private static bool TryParseCommand(string input, out Command command)
+     {
++        input = ApplyTemplate(input, out var parameter);
++        
+         command = input switch
+         {
+-            "q" => Command.Quit,
+-            "j" => Command.MoveDown,
+-            "k" => Command.MoveUp,
+-            "gg" => Command.MoveToTop,
+-            "G" => Command.MoveToBottom,
+-            "gt" => Command.NextFolder,
+-            "gT" => Command.PreviousFolder,
+-            _ => Command.None
++            "q" => new Command(CommandType.Quit),
++            "j" => new Command(CommandType.MoveDown),
++            "k" => new Command(CommandType.MoveUp),
++            "gg" => new Command(CommandType.MoveToTop),
++            "G" => new Command(CommandType.MoveToBottom),
++            "gt" => new Command(CommandType.NextFolder),
++            "gT" => new Command(CommandType.PreviousFolder),
++            "g%t" when parameter == "$" => new Command(CommandType.LastFolder),
++            "g%t" => new Command(CommandType.SelectFolder, parameter),
++            "<C-w>h" => new Command(CommandType.MoveSeparatorToLeft),
++            "<C-w>l" => new Command(CommandType.MoveSeparatorToRight),
++            _ => null
+         };
+-
+-        return command != Command.None;
++        
++        return command is not null;
++    }
++    
++    private static string ApplyTemplate(string input, out string parameter)
++    {
++        parameter = string.Empty;
++        
++        var templates = new[] { "g%t" };
++        foreach (var template in templates)
++        {
++            var index = template.IndexOf('%');
++            var start = template[..index];
++            var end = template[(index + 1)..];
++            
++            if (input.StartsWith(start) && input.EndsWith(end))
++            {
++                parameter = input[start.Length..^end.Length];
++                if (parameter.Length < 1)
++                    continue;
++                    
++                input = template;
++            }
++        }
++        
++        return input;
+     }
+ }
+\ No newline at end of file
+diff --git a/tg-cli/Model.cs b/tg-cli/Model.cs
+index 1e2c839..e18825e 100644
+--- a/tg-cli/Model.cs
++++ b/tg-cli/Model.cs
+@@ -11,6 +11,7 @@ public struct VisibleInterface
+     public IReadOnlyList<Chat> Chats { get; }
+     public int SelectedChatIndex { get; }
+     public string CommandInput { get; }
++    
+ 
+     public VisibleInterface(IReadOnlyList<Chat> chats, int selectedChatIndex, string commandInput,
+         IReadOnlyList<Folder> folders, int selectedFolderIndex)
+@@ -51,6 +52,7 @@ public class Chat
+     public int UnreadCount { get; set; }
+     public bool IsMuted { get; set; }
+     public bool IsPrivate => Id > 0;
++    public string LastMessagePreview { get; set; }
+ 
+     public Chat(long id, string title)
+     {
+@@ -64,7 +66,7 @@ public class Folder
+     public int TopChatIndex { get; set; }
+     public int SelectedChatIndex { get; set; }
+     public int RelativeSelectedChatIndex => SelectedChatIndex - TopChatIndex;
+-    
++
+     public ObservableCollection<Chat> Chats { get; } = new();
+     public List<Chat> SortedChats { get; } = new();
+     public Dictionary<long, Chat> ChatsDict { get; } = new();
+@@ -109,6 +111,7 @@ public class Folder
+ public class Model
+ {
+     private readonly IRenderer _renderer;
++    private readonly TgCliSettings _settings;
+     private readonly List<Folder> _folders = new();
+ 
+     private bool _muteChanneldByDefault;
+@@ -125,9 +128,10 @@ public class Model
+ 
+     public event Action<VisibleInterface> RenderRequested;
+ 
+-    public Model(IRenderer renderer)
++    public Model(IRenderer renderer, TgCliSettings settings)
+     {
+         _renderer = renderer;
++        _settings = settings;
+         _folders.Add(new Folder(-1, "All chats"));
+     }
+ 
+@@ -180,13 +184,38 @@ public class Model
+ 
+                 if (folder != SelectedFolder)
+                     return;
+-                    
++
+                 var sortedIndex = folder.SortedChats.IndexOf(chat);
+                 if (sortedIndex > VisibleChatsCount - 1)
+                     return;
+                 break;
+             }
+ 
++            case TdApi.Update.UpdateChatLastMessage updateChatLastMessage:
++            {
++                var lastMessagePreview = updateChatLastMessage?.LastMessage?.Content switch
++                {
++                    TdApi.MessageContent.MessageText mt => mt.Text.Text,
++                    TdApi.MessageContent.MessagePhoto => "Photo",
++                    TdApi.MessageContent.MessageAudio => "Audio",
++                    TdApi.MessageContent.MessageVideo => "Video",
++                    TdApi.MessageContent.MessageVoiceNote => "Voice message",
++                    TdApi.MessageContent.MessageVideoNote => "Video message",
++                    TdApi.MessageContent.MessageDocument => "Document",
++                    TdApi.MessageContent.MessageSticker => "Sticker",
++                    null => "<null>",
++                    _ => updateChatLastMessage.LastMessage.Content.DataType
++                };
++
++                lastMessagePreview = Utils.RemoveNonUtf16Characters(lastMessagePreview);
++
++                if (!AllChatsFolder.ChatsDict.TryGetValue(updateChatLastMessage.ChatId, out var chat))
++                    return; // TODO
++
++                chat.LastMessagePreview = lastMessagePreview;
++                break;
++            }
++
+             case TdApi.Update.UpdateChatReadInbox updateChatReadInbox:
+             {
+                 if (!AllChatsFolder.ChatsDict.TryGetValue(updateChatReadInbox.ChatId, out var chat))
+@@ -232,31 +261,55 @@ public class Model
+ 
+     public void OnListenerCommandReceived(Command command)
+     {
+-        switch (command)
++        switch (command.Type)
+         {
+-            case Command.MoveDown:
++            case CommandType.MoveDown:
+                 SelectChatAt(SelectedFolder.SelectedChatIndex + 1);
+                 break;
+ 
+-            case Command.MoveUp:
++            case CommandType.MoveUp:
+                 SelectChatAt(SelectedFolder.SelectedChatIndex - 1);
+                 break;
+ 
+-            case Command.MoveToTop:
++            case CommandType.MoveToTop:
+                 SelectChatAt(0);
+                 break;
+ 
+-            case Command.MoveToBottom:
++            case CommandType.MoveToBottom:
+                 SelectChatAt(SelectedFolder.Chats.Count - 1);
+                 break;
+ 
+-            case Command.NextFolder:
++            case CommandType.NextFolder:
+                 SelectFolderAt(_selectedFolderIndex + 1);
+                 break;
+ 
+-            case Command.PreviousFolder:
++            case CommandType.PreviousFolder:
+                 SelectFolderAt(_selectedFolderIndex - 1);
+                 break;
++                
++            case CommandType.SelectFolder:
++                if (!int.TryParse(command.Parameter, out var index))
++                    return;
++                    
++                if (index > _folders.Count - 1)
++                    index = _folders.Count - 1;
++                    
++                SelectFolderAt(index);
++                break;
++                
++            case CommandType.LastFolder:
++                SelectFolderAt(_folders.Count - 1);
++                break;
++                
++            case CommandType.MoveSeparatorToLeft:
++                _settings.SeparatorOffset -= 1;
++                RequestRender();
++                break;
++                
++            case CommandType.MoveSeparatorToRight:
++                _settings.SeparatorOffset += 1;
++                RequestRender();
++                break;
+         }
+     }
+ 
+@@ -307,9 +360,11 @@ public class Model
+     private void RequestRender()
+     {
+         var count = Math.Min(SelectedFolder.SortedChats.Count, VisibleChatsCount);
+-        IReadOnlyList<Chat> visibleChats = count > 0 ? SelectedFolder.SortedChats.GetRange(SelectedFolder.TopChatIndex, count) : Array.Empty<Chat>();
+-        var visibleInterface = new VisibleInterface(visibleChats, SelectedFolder.RelativeSelectedChatIndex, _commandInput, _folders,
+-            _selectedFolderIndex);
++        IReadOnlyList<Chat> visibleChats = count > 0
++            ? SelectedFolder.SortedChats.GetRange(SelectedFolder.TopChatIndex, count)
++            : Array.Empty<Chat>();
++        var visibleInterface = new VisibleInterface(visibleChats, SelectedFolder.RelativeSelectedChatIndex,
++            _commandInput, _folders, _selectedFolderIndex);
+ 
+         RenderRequested?.Invoke(visibleInterface);
+     }
+diff --git a/tg-cli/Program.cs b/tg-cli/Program.cs
+index 838460c..4c9dca9 100644
+--- a/tg-cli/Program.cs
++++ b/tg-cli/Program.cs
+@@ -34,8 +34,8 @@ public static class Program
+         var client = new Client(settings);
+         var authorizer = new Authorizer(ansiConsole);
+         var inputListener = new InputListener(ansiConsole);
+-        var renderer = new Renderer(ansiConsole);
+-        var model = new Model(renderer);
++        var renderer = new Renderer(ansiConsole, settings);
++        var model = new Model(renderer, settings);
+         client.UpdateReceived += authorizer.OnClientUpdateReceived;
+         client.UpdateReceived += model.OnClientUpdateReceived;
+         inputListener.CommandReceived += model.OnListenerCommandReceived;
+diff --git a/tg-cli/Renderer.cs b/tg-cli/Renderer.cs
+index f4b577f..f2be532 100644
+--- a/tg-cli/Renderer.cs
++++ b/tg-cli/Renderer.cs
+@@ -1,4 +1,5 @@
+ ﻿using System.Text;
++using Newtonsoft.Json;
+ using Spectre.Console;
+ using Spectre.Console.Rendering;
+ 
+@@ -23,19 +24,32 @@ public class Renderer : IRenderer
+     private const int TabsHeight = 1;
+ 
+     private readonly IAnsiConsole _console;
++    private readonly TgCliSettings _settings;
+ 
+     private int ConsoleWidthWithoutBorders => _console.Profile.Width - 1 - 1 - 1;
+     private int ConsoleHeightWithoutBorders => _console.Profile.Height - 1 - 1 - 1 - 1;
+ 
+-    private int ChatWidth => (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
++    private int ChatWidth
++    {
++        get 
++        { 
++            var defaultChatWidth = (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
++            if (Math.Abs(_settings.SeparatorOffset) < defaultChatWidth)
++                return defaultChatWidth - _settings.SeparatorOffset;
++                
++            return 0;
++        }
++    }
++
+     private int ChatListWidth => ConsoleWidthWithoutBorders - ChatWidth;
+ 
+-    public int MaxVisibleChatsCount => ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight -
+-                                       CommandsInputHeight - TabsHeight;
++    public int MaxVisibleChatsCount => (ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight -
++                                        CommandsInputHeight - TabsHeight) / 2;
+ 
+-    public Renderer(IAnsiConsole console)
++    public Renderer(IAnsiConsole console, TgCliSettings settings)
+     {
+         _console = console;
++        _settings = settings;
+     }
+ 
+     public void OnRenderRequested(VisibleInterface visibleInterface)
+@@ -54,6 +68,7 @@ public class Renderer : IRenderer
+         for (var i = 0; i < MaxVisibleChatsCount - visibleInterface.Chats.Count; ++i)
+         {
+             chatListLayout.AddRow(" ");
++            chatListLayout.AddRow(" ");
+         }
+ 
+         var chatPanel = new Markup("Messages here")
+@@ -96,13 +111,13 @@ public class Renderer : IRenderer
+             var markup = i == selectedFolderIndex ? $"[underline]{folder.Title}[/]" : $"{folder.Title}";
+ 
+             sb.Append(markup);
+-            
++
+             var unreadChats = folder.Chats.Where(c => c.UnreadCount > 0).ToList();
+             var color = unreadChats.All(c => c.IsMuted) ? MutedUnreadColor : UnreadColor;
+             var unreadChatsCount = unreadChats.Count;
+             if (unreadChatsCount > 0)
+                 sb.Append($" [{color}][[{unreadChatsCount}]][/]");
+-                
++
+             if (i != folders.Count - 1)
+                 sb.Append(" | ");
+         }
+@@ -144,7 +159,25 @@ public class Renderer : IRenderer
+         currentUnreadColor += isSelected ? " invert" : string.Empty;
+         var unreadMarkup = string.Format(unreadMarkupTemplate, currentUnreadColor, unreadText);
+ 
++        var lastMessagePreview = "<empty>";
++        if (chat.LastMessagePreview is not null)
++        {
++            const int guideWidth = 4;
++            var previewMessageWidth = ChatListWidth - guideWidth;
++            var lastMessageLines = chat.LastMessagePreview.Split('\n');
++            lastMessagePreview = lastMessageLines[0].EscapeMarkup();
++            if (lastMessagePreview.Length > previewMessageWidth)
++            {
++                lastMessagePreview = previewMessageWidth < 1
++                    ? ellipsis.ToString()
++                    : lastMessagePreview[..(previewMessageWidth - 1)] + ellipsis;
++            }
++        }
++
+         var markup = $"{titleMarkup}{unreadMarkup}";
+-        return new Markup(markup);
++        var tree = new Tree(new Markup(markup)) { Style = new Style(null, null, Decoration.Dim) };
++        tree.AddNode(new Markup(lastMessagePreview, new Style(null, null, Decoration.Dim)));
++
++        return tree;
+     }
+ }
+\ No newline at end of file
+diff --git a/tg-cli/TgCliSettings.cs b/tg-cli/TgCliSettings.cs
+new file mode 100644
+index 0000000..32602d9
+--- /dev/null
++++ b/tg-cli/TgCliSettings.cs
+@@ -0,0 +1,12 @@
++﻿using SettingsManagement;
++
++namespace tg_cli;
++
++#pragma warning disable CS0169
++
++public partial class TgCliSettings : ISettings
++{
++    [SaveOnChange] private int _separatorOffset;
++}
++
++#pragma warning restore CS0169

@@ -11,7 +11,6 @@ public struct VisibleInterface
     public IReadOnlyList<Chat> Chats { get; }
     public int SelectedChatIndex { get; }
     public string CommandInput { get; }
-    
 
     public VisibleInterface(IReadOnlyList<Chat> chats, int selectedChatIndex, string commandInput,
         IReadOnlyList<Folder> folders, int selectedFolderIndex)
@@ -79,6 +78,11 @@ public class Folder
         Id = id;
         Title = title;
         Chats.CollectionChanged += OnChatsCollectionChanged;
+    }
+
+    public void TriggerSort()
+    {
+        SortedChats.Sort(new Chat.Comparer(this));
     }
 
     private void OnChatsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
@@ -157,62 +161,40 @@ public class Model
 
                 if (SelectedFolder.Chats.Count - 1 > VisibleChatsCount)
                     return;
+
                 return;
             }
 
             case TdApi.Update.UpdateChatPosition updateChatPosition:
             {
-                var folder = updateChatPosition.Position.List switch
-                {
-                    TdApi.ChatList.ChatListFolder chatListFolder =>
-                        _folders.First(f => f.Id == chatListFolder.ChatFolderId),
-                    TdApi.ChatList.ChatListMain => AllChatsFolder,
-                    TdApi.ChatList.ChatListArchive => null, // TODO
-                    _ => throw new NotSupportedException()
-                };
-
-                if (folder is null)
+                var newIndex = SetChatPosition(updateChatPosition.ChatId, updateChatPosition.Position);
+                if (newIndex == -1 || newIndex > VisibleChatsCount - 1)
                     return;
-
-                if (!folder.ChatsDict.TryGetValue(updateChatPosition.ChatId, out var chat))
-                {
-                    chat = AllChatsFolder.ChatsDict[updateChatPosition.ChatId];
-                    folder.Chats.Add(chat);
-                }
-
-                chat.Positions[folder] = updateChatPosition.Position.Order;
-
-                if (folder != SelectedFolder)
-                    return;
-
-                var sortedIndex = folder.SortedChats.IndexOf(chat);
-                if (sortedIndex > VisibleChatsCount - 1)
-                    return;
+                
                 break;
             }
 
             case TdApi.Update.UpdateChatLastMessage updateChatLastMessage:
             {
-                var lastMessagePreview = updateChatLastMessage?.LastMessage?.Content switch
-                {
-                    TdApi.MessageContent.MessageText mt => mt.Text.Text,
-                    TdApi.MessageContent.MessagePhoto => "Photo",
-                    TdApi.MessageContent.MessageAudio => "Audio",
-                    TdApi.MessageContent.MessageVideo => "Video",
-                    TdApi.MessageContent.MessageVoiceNote => "Voice message",
-                    TdApi.MessageContent.MessageVideoNote => "Video message",
-                    TdApi.MessageContent.MessageDocument => "Document",
-                    TdApi.MessageContent.MessageSticker => "Sticker",
-                    null => "<null>",
-                    _ => updateChatLastMessage.LastMessage.Content.DataType
-                };
-
-                lastMessagePreview = Utils.RemoveNonUtf16Characters(lastMessagePreview);
-
+                var content = updateChatLastMessage?.LastMessage?.Content?.GetContentString();
                 if (!AllChatsFolder.ChatsDict.TryGetValue(updateChatLastMessage.ChatId, out var chat))
                     return; // TODO
 
-                chat.LastMessagePreview = lastMessagePreview;
+                chat.LastMessagePreview = content;
+
+                var requestRender = false;
+                foreach (var position in updateChatLastMessage.Positions)
+                {
+                    var newIndex = SetChatPosition(updateChatLastMessage.ChatId, position);
+                    if (newIndex == -1 || newIndex > VisibleChatsCount - 1)
+                        continue;
+                        
+                    requestRender = true;
+                };
+                
+                if (!requestRender)
+                    return;
+
                 break;
             }
 
@@ -258,7 +240,7 @@ public class Model
 
         RequestRender();
     }
-
+    
     public void OnListenerCommandReceived(Command command)
     {
         switch (command.Type)
@@ -286,26 +268,26 @@ public class Model
             case CommandType.PreviousFolder:
                 SelectFolderAt(_selectedFolderIndex - 1);
                 break;
-                
+
             case CommandType.SelectFolder:
                 if (!int.TryParse(command.Parameter, out var index))
                     return;
-                    
+
                 if (index > _folders.Count - 1)
                     index = _folders.Count - 1;
-                    
+
                 SelectFolderAt(index);
                 break;
-                
+
             case CommandType.LastFolder:
                 SelectFolderAt(_folders.Count - 1);
                 break;
-                
+
             case CommandType.MoveSeparatorToLeft:
                 _settings.SeparatorOffset -= 1;
                 RequestRender();
                 break;
-                
+
             case CommandType.MoveSeparatorToRight:
                 _settings.SeparatorOffset += 1;
                 RequestRender();
@@ -363,9 +345,40 @@ public class Model
         IReadOnlyList<Chat> visibleChats = count > 0
             ? SelectedFolder.SortedChats.GetRange(SelectedFolder.TopChatIndex, count)
             : Array.Empty<Chat>();
+            
         var visibleInterface = new VisibleInterface(visibleChats, SelectedFolder.RelativeSelectedChatIndex,
             _commandInput, _folders, _selectedFolderIndex);
 
         RenderRequested?.Invoke(visibleInterface);
+    }
+
+    private int SetChatPosition(long chatId, TdApi.ChatPosition position)
+    {
+        var folder = position.List switch
+        {
+            TdApi.ChatList.ChatListFolder chatListFolder =>
+                _folders.First(f => f.Id == chatListFolder.ChatFolderId),
+            TdApi.ChatList.ChatListMain => AllChatsFolder,
+            TdApi.ChatList.ChatListArchive => null, // TODO
+            _ => throw new NotSupportedException()
+        };
+
+        if (folder is null)
+            return -1;
+
+        if (!folder.ChatsDict.TryGetValue(chatId, out var chat))
+        {
+            chat = AllChatsFolder.ChatsDict[chatId];
+            folder.Chats.Add(chat);
+        }
+
+        chat.Positions[folder] = position.Order;
+        folder.TriggerSort();
+
+        if (folder != SelectedFolder)
+            return -1;
+
+        var sortedIndex = folder.SortedChats.IndexOf(chat);
+        return sortedIndex;
     }
 }
