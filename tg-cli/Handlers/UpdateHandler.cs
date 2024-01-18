@@ -6,10 +6,12 @@ namespace tg_cli.Handlers;
 
 public abstract class UpdateHandler<T> : IHandler<TdApi.Update>
 {
+    protected readonly MainViewModel ViewModel;
     protected readonly Model Model;
 
-    protected UpdateHandler(Model model)
+    protected UpdateHandler(MainViewModel viewModel, Model model)
     {
+        ViewModel = viewModel;
         Model = model;
     }
 
@@ -22,13 +24,13 @@ public abstract class UpdateHandler<T> : IHandler<TdApi.Update>
 
         return await HandleAsync(t);
     }
-    
+
     public bool CanHandle(TdApi.Update update) => update is T;
 }
 
 public class UpdateNewChatHandler : UpdateHandler<TdApi.Update.UpdateNewChat>
 {
-    public UpdateNewChatHandler(Model model) : base(model)
+    public UpdateNewChatHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
@@ -45,54 +47,50 @@ public class UpdateNewChatHandler : UpdateHandler<TdApi.Update.UpdateNewChat>
             newChat.IsMuted = Model.MuteChannelsByDefault;
 
         Model.AllChatsFolder.Chats.Add(newChat);
-        return Task.FromResult(false);
+        return Task.FromResult(ViewModel.IsChatVisible(newChat));
     }
 }
 
 public class UpdateChatPositionHandler : UpdateHandler<TdApi.Update.UpdateChatPosition>
 {
-    public UpdateChatPositionHandler(Model model) : base(model)
+    public UpdateChatPositionHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
     protected override Task<bool> HandleAsync(TdApi.Update.UpdateChatPosition update)
     {
-        var newIndex = Model.SetChatPosition(update.ChatId, update.Position);
-        return Task.FromResult(newIndex != -1);
+        var chat = Model.SetChatPosition(update.ChatId, update.Position);
+        return Task.FromResult(chat is not null && ViewModel.IsChatVisible(chat));
     }
 }
 
 public class UpdateChatLastMessageHandler : UpdateHandler<TdApi.Update.UpdateChatLastMessage>
 {
-    public UpdateChatLastMessageHandler(Model model) : base(model)
+    public UpdateChatLastMessageHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
     protected override Task<bool> HandleAsync(TdApi.Update.UpdateChatLastMessage update)
     {
-        var content = update?.LastMessage?.Content?.GetContentString();
+        if (update.LastMessage is null)
+            return Task.FromResult(false);
+
+        var content = update.LastMessage.Content?.GetContentString();
         if (!Model.AllChatsFolder.ChatsDict.TryGetValue(update.ChatId, out var chat))
             return Task.FromResult(false); // TODO
 
-        chat.LastMessagePreview = content;
+        chat.LastMessage = new Message(update.LastMessage.Id, content);
 
-        var requestRender = false;
-        foreach (var position in update.Positions)
-        {
-            var newIndex = Model.SetChatPosition(update.ChatId, position);
-            if (newIndex == -1)
-                continue;
+        foreach (var position in update.Positions) 
+            Model.SetChatPosition(update.ChatId, position);
 
-            requestRender = true;
-        }
-
-        return Task.FromResult(requestRender);
+        return Task.FromResult(ViewModel.IsChatVisible(chat));
     }
 }
 
 public class UpdateChatReadInboxHandler : UpdateHandler<TdApi.Update.UpdateChatReadInbox>
 {
-    public UpdateChatReadInboxHandler(Model model) : base(model)
+    public UpdateChatReadInboxHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
@@ -102,13 +100,13 @@ public class UpdateChatReadInboxHandler : UpdateHandler<TdApi.Update.UpdateChatR
             return Task.FromResult(false); // TODO
 
         chat.UnreadCount = update.UnreadCount;
-        return Task.FromResult(true);
+        return Task.FromResult(ViewModel.IsChatVisible(chat));
     }
 }
 
 public class UpdateScopeNotificationSettingsHandler : UpdateHandler<TdApi.Update.UpdateScopeNotificationSettings>
 {
-    public UpdateScopeNotificationSettingsHandler(Model model) : base(model)
+    public UpdateScopeNotificationSettingsHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
@@ -121,7 +119,7 @@ public class UpdateScopeNotificationSettingsHandler : UpdateHandler<TdApi.Update
 
 public class UpdateChatNotificationSettingsHandler : UpdateHandler<TdApi.Update.UpdateChatNotificationSettings>
 {
-    public UpdateChatNotificationSettingsHandler(Model model) : base(model)
+    public UpdateChatNotificationSettingsHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
@@ -133,13 +131,13 @@ public class UpdateChatNotificationSettingsHandler : UpdateHandler<TdApi.Update.
         if (!update.NotificationSettings.UseDefaultMuteFor)
             chat.IsMuted = update.NotificationSettings.MuteFor != 0;
 
-        return Task.FromResult(true);
+        return Task.FromResult(ViewModel.IsChatVisible(chat));
     }
 }
 
 public class UpdateChatFoldersHandler : UpdateHandler<TdApi.Update.UpdateChatFolders>
 {
-    public UpdateChatFoldersHandler(Model model) : base(model)
+    public UpdateChatFoldersHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
@@ -157,7 +155,7 @@ public class UpdateChatFoldersHandler : UpdateHandler<TdApi.Update.UpdateChatFol
 
 public class UpdateChatActionHandler : UpdateHandler<TdApi.Update.UpdateChatAction>
 {
-    public UpdateChatActionHandler(Model model) : base(model)
+    public UpdateChatActionHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
@@ -168,6 +166,9 @@ public class UpdateChatActionHandler : UpdateHandler<TdApi.Update.UpdateChatActi
 
         // TODO: doesn't work for private chats
         var chatAction = update.Action.GetChatActionString();
+        if (chatAction is null)
+            return Task.FromResult(false);
+
         var senderId = update.SenderId switch
         {
             TdApi.MessageSender.MessageSenderChat senderChat => senderChat.ChatId,
@@ -184,13 +185,13 @@ public class UpdateChatActionHandler : UpdateHandler<TdApi.Update.UpdateChatActi
 
         chat.ChatAction = chatAction;
 
-        return Task.FromResult(Model.SelectedFolder.ChatsDict.ContainsKey(chat.Id));
+        return Task.FromResult(ViewModel.IsChatVisible(chat));
     }
 }
 
 public class UpdateUserStatusHandler : UpdateHandler<TdApi.Update.UpdateUserStatus>
 {
-    public UpdateUserStatusHandler(Model model) : base(model)
+    public UpdateUserStatusHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 
@@ -206,13 +207,15 @@ public class UpdateUserStatusHandler : UpdateHandler<TdApi.Update.UpdateUserStat
         };
 
         user.IsOnline = isOnline;
-        return Task.FromResult(true);
+
+        return Task.FromResult(
+            Model.SelectedFolder.ChatsDict.TryGetValue(user.Id, out var chat) && ViewModel.IsChatVisible(chat));
     }
 }
 
 public class UpdateUserHandler : UpdateHandler<TdApi.Update.UpdateUser>
 {
-    public UpdateUserHandler(Model model) : base(model)
+    public UpdateUserHandler(MainViewModel viewModel, Model model) : base(viewModel, model)
     {
     }
 

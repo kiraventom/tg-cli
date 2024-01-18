@@ -14,8 +14,7 @@ public class Model
 
     public Folder AllChatsFolder => Folders[0];
     public Folder SelectedFolder => Folders[SelectedFolderIndex];
-
-
+    
     public Model()
     {
         Folders.Add(new Folder(-1, "All chats"));
@@ -49,7 +48,7 @@ public class Model
         SelectedFolderIndex = index;
     }
 
-    public int SetChatPosition(long chatId, TdApi.ChatPosition position)
+    public Chat SetChatPosition(long chatId, TdApi.ChatPosition position)
     {
         var folder = position.List switch
         {
@@ -60,7 +59,7 @@ public class Model
         };
 
         if (folder is null)
-            return -1;
+            return null;
 
         if (!folder.ChatsDict.TryGetValue(chatId, out var chat))
         {
@@ -71,10 +70,6 @@ public class Model
         chat.Positions[folder] = position.Order;
         folder.TriggerSort();
 
-        if (folder != SelectedFolder)
-            return -1;
-
-        var sortedIndex = folder.SortedChats.IndexOf(chat);
-        return sortedIndex;
+        return chat;
     }
 }

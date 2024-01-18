@@ -24,6 +24,7 @@ public class MainViewModel
     private int RelativeSelectedChatIndex => _model.SelectedFolder.SelectedChatIndex - TopChatIndex;
     private int BottomChatIndex => TopChatIndex + VisibleChatsCount - 1;
     private int VisibleChatsCount => _renderer.MaxVisibleChatsCount;
+    private int VisibleMessagesCount => _renderer.MaxVisibleMessagesCount;
 
     public event Action<VisibleInterface> RenderRequested;
 
@@ -53,7 +54,7 @@ public class MainViewModel
 
     public async void OnListenerCommandReceived(Command command)
     {
-       await _commandHandlers.HandleAsync(command);
+        await _commandHandlers.HandleAsync(command);
 
         if (_model.SelectedFolder.SelectedChatIndex < TopChatIndex)
             TopChatIndexes[_model.SelectedFolderIndex] = _model.SelectedFolder.SelectedChatIndex;
@@ -70,32 +71,47 @@ public class MainViewModel
         _commandInput = input;
         RequestRender();
     }
+    
+    public bool IsChatVisible(Chat chat)
+    {
+        if (!_model.SelectedFolder.ChatsDict.ContainsKey(chat.Id))
+            return false;
+            
+        var index = _model.SelectedFolder.SortedChats.IndexOf(chat);
+        return index >= TopChatIndex && index <= BottomChatIndex;
+    }
 
     private void RequestRender()
     {
-        var count = Math.Min(_model.SelectedFolder.SortedChats.Count, VisibleChatsCount);
-        IReadOnlyList<Chat> visibleChats = count > 0
-            ? _model.SelectedFolder.SortedChats.GetRange(TopChatIndex, count)
+        var chatsCount = Math.Min(_model.SelectedFolder.SortedChats.Count, VisibleChatsCount);
+        IReadOnlyList<Chat> visibleChats = chatsCount > 0
+            ? _model.SelectedFolder.SortedChats.GetRange(TopChatIndex, chatsCount)
             : Array.Empty<Chat>();
 
-        var visibleInterface = new VisibleInterface(visibleChats, RelativeSelectedChatIndex,
-            _commandInput, _model.Folders, _model.SelectedFolderIndex, _model.Users);
+        var messagesCount = Math.Min(_model.SelectedFolder?.SelectedChat?.Messages?.Count ?? 0, VisibleMessagesCount);
+        IReadOnlyList<Message> visibleMessages = messagesCount > 0
+            ? _model.SelectedFolder.SelectedChat.Messages.GetRange(
+                _model.SelectedFolder.SelectedChat.Messages.Count - messagesCount, messagesCount)
+            : Array.Empty<Message>();
+
+        var visibleInterface = new VisibleInterface(_model.Folders, visibleChats, visibleMessages,
+            RelativeSelectedChatIndex, _commandInput, _model.SelectedFolderIndex, _model.Users);
 
         RenderRequested?.Invoke(visibleInterface);
     }
-    
+
     private void RegisterUpdateHandlers()
     {
-        _updateHandlers.Register(new UpdateNewChatHandler(_model));
-        _updateHandlers.Register(new UpdateChatPositionHandler(_model));
-        _updateHandlers.Register(new UpdateChatLastMessageHandler(_model));
-        _updateHandlers.Register(new UpdateChatReadInboxHandler(_model));
-        _updateHandlers.Register(new UpdateScopeNotificationSettingsHandler(_model));
-        _updateHandlers.Register(new UpdateChatNotificationSettingsHandler(_model));
-        _updateHandlers.Register(new UpdateChatFoldersHandler(_model));
-        _updateHandlers.Register(new UpdateChatActionHandler(_model));
-        _updateHandlers.Register(new UpdateUserStatusHandler(_model));
-        _updateHandlers.Register(new UpdateUserHandler(_model));
+        _updateHandlers.Register(new UpdateNewChatHandler(this, _model));
+        _updateHandlers.Register(new UpdateChatPositionHandler(this, _model));
+        _updateHandlers.Register(new UpdateChatLastMessageHandler(this, _model));
+        _updateHandlers.Register(new UpdateChatReadInboxHandler(this, _model));
+        _updateHandlers.Register(new UpdateScopeNotificationSettingsHandler(this, _model));
+        _updateHandlers.Register(new UpdateChatNotificationSettingsHandler(this, _model));
+        _updateHandlers.Register(new UpdateChatFoldersHandler(this, _model));
+        _updateHandlers.Register(new UpdateChatActionHandler(this, _model));
+        _updateHandlers.Register(new UpdateUserStatusHandler(this, _model));
+        _updateHandlers.Register(new UpdateUserHandler(this, _model));
     }
 
     private void RegisterCommandHandlers()
@@ -111,5 +127,6 @@ public class MainViewModel
         _commandHandlers.Register(new MoveSeparatorToLeftCommandHandler(_settings, _model));
         _commandHandlers.Register(new MoveSeparatorToRightCommandHandler(_settings, _model));
         _commandHandlers.Register(new LoadChatsCommandHandler(_client, _model));
+        _commandHandlers.Register(new LoadMessagesCommandHandler(_client, _renderer, _model));
     }
 }

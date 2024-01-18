@@ -86,6 +86,7 @@ public class InputListener
             "<C-w>h" => new MoveSeparatorToLeftCommand(),
             "<C-w>l" => new MoveSeparatorToRightCommand(),
             "R" => new LoadChatsCommand(),
+            "l" => new LoadMessagesCommand(),
             _ => null
         };
 

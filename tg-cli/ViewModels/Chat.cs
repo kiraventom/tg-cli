@@ -28,7 +28,8 @@ public class Chat
     public int UnreadCount { get; set; }
     public bool IsMuted { get; set; }
     public bool IsPrivate => Id > 0;
-    public string LastMessagePreview { get; set; }
+    public List<Message> Messages { get; } = new();
+    public Message LastMessage { get; set; }
     public string ChatAction { get; set; }
 
     public Chat(long id, string title)

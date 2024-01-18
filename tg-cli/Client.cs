@@ -6,7 +6,8 @@ namespace tg_cli;
 
 public interface IClient
 {
-    public Task LoadChatsAsync(int chatListId);
+    Task LoadChatsAsync(int chatListId);
+    Task<TdApi.Messages> LoadMessagesAsync(long chatId, long fromMessageId, int offset, int limit);
 }
 
 public sealed class Client : IDisposable, IClient
@@ -42,6 +43,30 @@ public sealed class Client : IDisposable, IClient
         }
     }
 
+    public async Task LoadChatsAsync(int chatListId = -1)
+    {
+        var chatList = chatListId != -1
+            ? new TdApi.ChatList.ChatListFolder {ChatFolderId = chatListId}
+            : null;
+
+        await _client.LoadChatsAsync(chatList, 20);
+    }
+
+    public async Task<TdApi.Messages> LoadMessagesAsync(long chatId, long fromMessageId, int offset, int limit)
+    {
+        TdApi.Messages messages = null;
+        try
+        {
+            messages = await _client.GetChatHistoryAsync(chatId, fromMessageId, offset, limit);
+        }
+        catch (TdException e)
+        {
+            Program.Logger.Error(e.Error.Message);
+        }
+        
+        return messages;
+    }
+
     void IDisposable.Dispose()
     {
         _waitingForReadyCts?.Dispose();
@@ -69,15 +94,6 @@ public sealed class Client : IDisposable, IClient
         }
 
         UpdateReceived?.Invoke(client, update);
-    }
-
-    public async Task LoadChatsAsync(int chatListId = -1)
-    {
-        var chatList = chatListId != -1
-            ? new TdApi.ChatList.ChatListFolder {ChatFolderId = chatListId}
-            : null;
-
-        await _client.LoadChatsAsync(chatList, 20);
     }
 
     private static void InitLogging(TdClient client, string pathToLogFile)

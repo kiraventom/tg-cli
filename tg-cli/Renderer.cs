@@ -8,6 +8,7 @@ namespace tg_cli;
 public interface IRenderer
 {
     public int MaxVisibleChatsCount { get; }
+    public int MaxVisibleMessagesCount { get; }
 }
 
 public class Renderer : IRenderer
@@ -34,17 +35,20 @@ public class Renderer : IRenderer
         get
         {
             var defaultChatWidth = (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
-            if (Math.Abs(_settings.SeparatorOffset) < defaultChatWidth)
-                return defaultChatWidth - _settings.SeparatorOffset;
+            if (Math.Abs(_settings.SeparatorOffset) >= defaultChatWidth)
+                return 0;
 
-            return 0;
+            return defaultChatWidth - _settings.SeparatorOffset;
         }
     }
 
     private int ChatListWidth => ConsoleWidthWithoutBorders - ChatWidth;
 
-    public int MaxVisibleChatsCount => (ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight -
-                                        CommandsInputHeight - TabsHeight) / 2;
+    public int MaxVisibleChatsCount =>
+        (ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight - CommandsInputHeight - TabsHeight) / 2;
+
+    public int MaxVisibleMessagesCount =>
+        ConsoleHeightWithoutBorders - StupidFuckingLineOnBottomHeight - CommandsInputHeight - TabsHeight;
 
     public Renderer(IAnsiConsole console, TgCliSettings settings)
     {
@@ -68,14 +72,12 @@ public class Renderer : IRenderer
 
         for (var i = 0; i < MaxVisibleChatsCount - visibleInterface.Chats.Count; ++i)
         {
-            chatListLayout.AddRow(" ");
-            chatListLayout.AddRow(" ");
+            chatListLayout.AddRow(" "); // chat title
+            chatListLayout.AddRow(" "); // chat preview
         }
 
-        var chatPanel = new Markup("Messages here")
-        {
-            Justification = Justify.Center
-        };
+        var messagesTable = new Table {Border = TableBorder.None, ShowHeaders = false, Expand = true};
+        messagesTable.AddColumn(string.Empty);
 
         var messengerTable = new Table {Border = TableBorder.Square};
         messengerTable.AddColumn("Chats list");
@@ -88,7 +90,7 @@ public class Renderer : IRenderer
 
         messengerTable.AddColumn(selectedChat?.Title?.EscapeMarkup() ?? string.Empty);
         messengerTable.Columns[1].Width = ChatWidth;
-        messengerTable.AddRow(chatListLayout, chatPanel);
+        messengerTable.AddRow(chatListLayout, messagesTable);
 
         var tabs = MarkupTabs(visibleInterface.Folders, visibleInterface.SelectedFolderIndex);
 
@@ -98,6 +100,25 @@ public class Renderer : IRenderer
         mainTable.AddRow(tabs);
         mainTable.AddRow(messengerTable);
         mainTable.AddRow(visibleInterface.CommandInput);
+        
+        var realChatWidth = ChatWidth - 6; // magic number
+        var oddStyle = new Style(null, Color.Grey);
+        var fakeConsole = new FakeConsole(realChatWidth, _console.Profile.Height);
+        var linesCount = MaxVisibleMessagesCount;
+        for (var i = visibleInterface.Messages.Count - 1; i >= 0; --i)
+        {
+            var message = visibleInterface.Messages[i];
+            var text = new Text(message.Text.EscapeMarkup()).Fold();
+            var segments = text.GetSegments(fakeConsole);
+            var renderedText = segments.Select(s => s.Text).Aggregate((t, s) => t + s);
+            var renderedLinesCount = renderedText.Count(c => c == '\n') + 1;
+            linesCount -= renderedLinesCount;
+            if (linesCount < 0)
+                break;
+
+            var style = i % 2 == 0 ? Style.Plain : oddStyle;
+            messagesTable.InsertRow(0, new Text(renderedText, style));
+        }
 
         _console.Clear();
         _console.Write(mainTable);
@@ -160,8 +181,8 @@ public class Renderer : IRenderer
 
         if (chat.ChatAction is not null)
             lastMessagePreview = CropString(chat.ChatAction, previewMessageWidth);
-        else if (chat.LastMessagePreview is not null)
-            lastMessagePreview = CropString(chat.LastMessagePreview, previewMessageWidth);
+        else if (chat.LastMessage is not null)
+            lastMessagePreview = CropString(chat.LastMessage.Text, previewMessageWidth);
 
         var markup = $"{titleMarkup}{unreadMarkup}";
         var tree = new Tree(new Markup(markup)) {Style = new Style(null, null, Decoration.Dim)};

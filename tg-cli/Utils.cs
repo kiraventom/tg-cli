@@ -1,4 +1,7 @@
-﻿namespace tg_cli;
+﻿using System.Text;
+using TdLib;
+
+namespace tg_cli;
 
 public static class Utils
 {
@@ -11,7 +14,7 @@ public static class Utils
     {
         "\ufe0f", "\ufe0e", // Emoji variant forms
     };
-    
+
     private static readonly string[] CombiningDiacriticalMarks;
 
     static Utils()
@@ -21,7 +24,7 @@ public static class Utils
         {
             list.Add(c.ToString());
         }
-        
+
         CombiningDiacriticalMarks = list.ToArray();
     }
 
@@ -31,13 +34,48 @@ public static class Utils
         input = string.Join(string.Empty, input.Where(c => !char.IsSurrogate(c)));
         input = EmptyChars.Aggregate(input,
             (current, zeroWidth) => current.Replace(zeroWidth, string.Empty));
-            
+
         input = EmojiVariants.Aggregate(input,
             (current, emoji) => current.Replace(emoji, string.Empty));
-            
+
         input = CombiningDiacriticalMarks.Aggregate(input,
             (current, diacritics) => current.Replace(diacritics, string.Empty));
 
         return input;
+    }
+
+    public static IReadOnlyList<string> WrapText(string text, int width)
+    {
+        List<string> wrappedLines = new();
+        var lines = text.Split('\n');
+        foreach (var line in lines)
+        {
+            var words = line.Split(' ');
+            var i = 0;
+            while (i < words.Length)
+            {
+                StringBuilder lineBuilder = new();
+                for (; i < words.Length; ++i)
+                {
+                    var word = words[i];
+                    if (lineBuilder.Length + word.Length + 1 > width)
+                    {
+                        if (lineBuilder.Length == 0)
+                        {
+                            var chunks = word.Chunk(width).Select(c => new string(c));
+                            wrappedLines.AddRange(chunks);
+                        }
+                        
+                        break;
+                    }
+
+                    lineBuilder.Append(word).Append(' ');
+                }
+                
+                wrappedLines.Add(lineBuilder.ToString());
+            }
+        }
+        
+        return wrappedLines;
     }
 }

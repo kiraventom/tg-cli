@@ -67,3 +67,7 @@ public class MoveSeparatorToRightCommand : Command
 public class LoadChatsCommand : Command
 {
 }
+
+public class LoadMessagesCommand : Command
+{
+}

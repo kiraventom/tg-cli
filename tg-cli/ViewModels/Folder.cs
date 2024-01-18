@@ -6,6 +6,7 @@ namespace tg_cli.ViewModels;
 public class Folder
 {
     public int SelectedChatIndex { get; set; }
+    public Chat SelectedChat => SelectedChatIndex < SortedChats.Count ? SortedChats[SelectedChatIndex] : null;
 
     public ObservableCollection<Chat> Chats { get; } = new();
     public List<Chat> SortedChats { get; } = new();

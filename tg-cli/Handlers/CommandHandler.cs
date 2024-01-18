@@ -1,4 +1,7 @@
-﻿namespace tg_cli.Handlers;
+﻿using tg_cli.Extensions;
+using tg_cli.ViewModels;
+
+namespace tg_cli.Handlers;
 
 public abstract class CommandHandler<T> : IHandler<Command>
 {
@@ -18,7 +21,7 @@ public abstract class CommandHandler<T> : IHandler<Command>
 
         return await HandleAsync(t);
     }
-    
+
     public bool CanHandle(Command obj) => obj is T;
 }
 
@@ -133,7 +136,7 @@ public class LastFolderCommandHandler : CommandHandler<LastFolderCommand>
 public class MoveSeparatorToLeftCommandHandler : CommandHandler<MoveSeparatorToLeftCommand>
 {
     private TgCliSettings Settings { get; }
-    
+
     public MoveSeparatorToLeftCommandHandler(TgCliSettings settings, Model model) : base(model)
     {
         Settings = settings;
@@ -149,7 +152,7 @@ public class MoveSeparatorToLeftCommandHandler : CommandHandler<MoveSeparatorToL
 public class MoveSeparatorToRightCommandHandler : CommandHandler<MoveSeparatorToRightCommand>
 {
     private TgCliSettings Settings { get; }
-    
+
     public MoveSeparatorToRightCommandHandler(TgCliSettings settings, Model model) : base(model)
     {
         Settings = settings;
@@ -175,5 +178,49 @@ public class LoadChatsCommandHandler : CommandHandler<LoadChatsCommand>
     {
         await Client.LoadChatsAsync(Model.SelectedFolder.Id);
         return false;
+    }
+}
+
+public class LoadMessagesCommandHandler : CommandHandler<LoadMessagesCommand>
+{
+    private IRenderer Renderer { get; }
+    private IClient Client { get; }
+
+    public LoadMessagesCommandHandler(IClient client, IRenderer renderer, Model model) : base(model)
+    {
+        Renderer = renderer;
+        Client = client;
+    }
+
+    protected override async Task<bool> HandleAsync(LoadMessagesCommand command)
+    {
+        var chatId = Model.SelectedFolder.SelectedChat.Id;
+        long lastMessageId = 0;
+        if (Model.SelectedFolder.SelectedChat.Messages.Any())
+        {
+            lastMessageId = Model.SelectedFolder.SelectedChat.Messages.First().Id;
+        }
+        else if (Model.SelectedFolder.SelectedChat.LastMessage is not null)
+        {
+            lastMessageId = Model.SelectedFolder.SelectedChat.LastMessage.Id;
+            Model.SelectedFolder.SelectedChat.Messages.Insert(0, Model.SelectedFolder.SelectedChat.LastMessage);
+        }
+
+        var messagesCount = Renderer.MaxVisibleMessagesCount;
+
+        while (Model.SelectedFolder.SelectedChat.Messages.Count < messagesCount)
+        {
+            var messages = await Client.LoadMessagesAsync(chatId, lastMessageId, 0, messagesCount);
+            if (messages?.Messages_ is null)
+                return false;
+
+            foreach (var message in messages.Messages_)
+            {
+                var messageViewModel = new Message(message.Id, message.Content.GetContentString());
+                Model.SelectedFolder.SelectedChat.Messages.Insert(0, messageViewModel);
+            }
+        }
+
+        return true;
     }
 }
