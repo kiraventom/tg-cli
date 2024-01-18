@@ -1,5 +1,6 @@
 ﻿using Spectre.Console;
 using TdLib;
+using tg_cli.Extensions;
 
 namespace tg_cli;
 

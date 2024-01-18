@@ -30,19 +30,27 @@ public static class Program
         Logger = new LoggerConfiguration()
             .WriteTo.File(appLogFilePath)
             .CreateLogger();
+            
+        Logger.Information("=== tg-cli launched ===");
     
-        var client = new Client(settings);
+        var client = new Client();
         var authorizer = new Authorizer(ansiConsole);
         var inputListener = new InputListener(ansiConsole);
         var renderer = new Renderer(ansiConsole, settings);
-        var model = new Model(renderer, settings);
+        var model = new Model();
+        var viewModel = new MainViewModel(renderer, client, settings, model);
+        
         client.UpdateReceived += authorizer.OnClientUpdateReceived;
-        client.UpdateReceived += model.OnClientUpdateReceived;
-        inputListener.CommandReceived += model.OnListenerCommandReceived;
-        inputListener.InputReceived += model.OnListenerInputReceived;
-        model.RenderRequested += renderer.OnRenderRequested;
+        client.UpdateReceived += viewModel.OnClientUpdateReceived;
+        
+        inputListener.CommandReceived += viewModel.OnListenerCommandReceived;
+        inputListener.InputReceived += viewModel.OnListenerInputReceived;
+        
+        viewModel.RenderRequested += renderer.OnRenderRequested;
         
         await client.Start(databaseDirPath, filesDirPath, tdLibLogsPath);
         await inputListener.StartListen();
+        
+        Logger.Information("=== tg-cli exited ===");
     }
 }

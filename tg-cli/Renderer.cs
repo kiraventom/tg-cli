@@ -1,7 +1,7 @@
 ﻿using System.Text;
-using Newtonsoft.Json;
 using Spectre.Console;
 using Spectre.Console.Rendering;
+using tg_cli.ViewModels;
 
 namespace tg_cli;
 
@@ -31,12 +31,12 @@ public class Renderer : IRenderer
 
     private int ChatWidth
     {
-        get 
-        { 
+        get
+        {
             var defaultChatWidth = (int) Math.Round(ConsoleWidthWithoutBorders * ChatWidthMod);
             if (Math.Abs(_settings.SeparatorOffset) < defaultChatWidth)
                 return defaultChatWidth - _settings.SeparatorOffset;
-                
+
             return 0;
         }
     }
@@ -61,7 +61,8 @@ public class Renderer : IRenderer
         for (var i = 0; i < visibleInterface.Chats.Count; ++i)
         {
             var chat = visibleInterface.Chats[i];
-            var chatMarkup = MarkupChat(chat, i == visibleInterface.SelectedChatIndex);
+            var isOnline = visibleInterface.Users.TryGetValue(chat.Id, out var user) && user.IsOnline;
+            var chatMarkup = MarkupChat(chat, i == visibleInterface.SelectedChatIndex, isOnline);
             chatListLayout.AddRow(chatMarkup);
         }
 
@@ -126,58 +127,65 @@ public class Renderer : IRenderer
         return tabs;
     }
 
-    private IRenderable MarkupChat(Chat chat, bool isSelected)
+    private IRenderable MarkupChat(Chat chat, bool isSelected, bool isOnline)
     {
-        const char ellipsis = '\u2026';
         const string infinity = "\u221e";
-
-        var title = chat.Title;
 
         var unreadText = chat.UnreadCount == 0 ? string.Empty : chat.UnreadCount.ToString();
         if (unreadText.Length > UnreadCounterWidth)
             unreadText = infinity;
 
         var chatTitleWidth = unreadText.Length > 0 ? ChatListWidth - unreadText.Length - 1 : ChatListWidth;
-        if (chat.Title.Length > chatTitleWidth)
-        {
-            title = chatTitleWidth < 1 ? ellipsis.ToString() : title[..(chatTitleWidth - 1)] + ellipsis;
-        }
-        else
-        {
-            title += new string(' ', chatTitleWidth - chat.Title.Length);
-        }
+        var title = CropString(chat.Title, chatTitleWidth);
 
         const string titleMarkupTemplate = "{0}";
-        const string selectedTitleMarkupTemplate = $"[invert]{titleMarkupTemplate}[/]";
+        const string onlineTitleMarkupTemplate = "[green]{0}[/]";
+        const string selectedTitleMarkupTemplate = "[invert]{0}[/]";
         const string unreadMarkupTemplate = "[{0}] {1}[/]";
 
-        var currentTitleMarkupTemplate = isSelected ? selectedTitleMarkupTemplate : titleMarkupTemplate;
+        var markupTemplate = titleMarkupTemplate;
+        markupTemplate = isOnline ? string.Format(onlineTitleMarkupTemplate, markupTemplate) : markupTemplate;
+        markupTemplate = isSelected ? string.Format(selectedTitleMarkupTemplate, markupTemplate) : markupTemplate;
+
         var escapedTitle = title.EscapeMarkup();
-        var titleMarkup = string.Format(currentTitleMarkupTemplate, escapedTitle);
+        var titleMarkup = string.Format(markupTemplate, escapedTitle);
 
         var currentUnreadColor = chat.IsMuted ? MutedUnreadColor : UnreadColor;
         currentUnreadColor += isSelected ? " invert" : string.Empty;
         var unreadMarkup = string.Format(unreadMarkupTemplate, currentUnreadColor, unreadText);
 
+        const int guideWidth = 4;
+        var previewMessageWidth = ChatListWidth - guideWidth;
         var lastMessagePreview = "<empty>";
-        if (chat.LastMessagePreview is not null)
-        {
-            const int guideWidth = 4;
-            var previewMessageWidth = ChatListWidth - guideWidth;
-            var lastMessageLines = chat.LastMessagePreview.Split('\n');
-            lastMessagePreview = lastMessageLines[0].EscapeMarkup();
-            if (lastMessagePreview.Length > previewMessageWidth)
-            {
-                lastMessagePreview = previewMessageWidth < 1
-                    ? ellipsis.ToString()
-                    : lastMessagePreview[..(previewMessageWidth - 1)] + ellipsis;
-            }
-        }
+
+        if (chat.ChatAction is not null)
+            lastMessagePreview = CropString(chat.ChatAction, previewMessageWidth);
+        else if (chat.LastMessagePreview is not null)
+            lastMessagePreview = CropString(chat.LastMessagePreview, previewMessageWidth);
 
         var markup = $"{titleMarkup}{unreadMarkup}";
-        var tree = new Tree(new Markup(markup)) { Style = new Style(null, null, Decoration.Dim) };
+        var tree = new Tree(new Markup(markup)) {Style = new Style(null, null, Decoration.Dim)};
         tree.AddNode(new Markup(lastMessagePreview, new Style(null, null, Decoration.Dim)));
 
         return tree;
+    }
+
+    private static string CropString(string str, int width)
+    {
+        const char ellipsis = '\u2026';
+        var lines = str.Split('\n');
+        str = lines[0].EscapeMarkup();
+        if (str.Length > width)
+        {
+            str = width < 1
+                ? ellipsis.ToString()
+                : str[..(width - 1)] + ellipsis;
+        }
+        else
+        {
+            str += new string(' ', width - str.Length);
+        }
+
+        return str;
     }
 }

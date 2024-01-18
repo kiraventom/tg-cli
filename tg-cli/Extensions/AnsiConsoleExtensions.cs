@@ -1,6 +1,6 @@
 using Spectre.Console;
 
-namespace tg_cli;
+namespace tg_cli.Extensions;
 
 public static class AnsiConsoleExtensions
 {

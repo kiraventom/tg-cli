@@ -1,7 +1,8 @@
 ﻿using Serilog.Core;
 using TdLib;
+using tg_cli.ViewModels;
 
-namespace tg_cli;
+namespace tg_cli.Extensions;
 
 public static class LogExtensions
 {
@@ -32,8 +33,15 @@ public static class LogExtensions
 
             case TdApi.Update.UpdateChatPosition updateChatPosition:
             {
+                var listName = updateChatPosition.Position.List switch
+                {
+                    TdApi.ChatList.ChatListArchive chatListArchive => "Archive",
+                    TdApi.ChatList.ChatListFolder chatListFolder => $"Folder '{chatListFolder.ChatFolderId}'",
+                    TdApi.ChatList.ChatListMain chatListMain => "All chats",
+                };
+                
                 logger.Information("Chat position: {order} in {list} ({titleAndId})", updateChatPosition.Position.Order,
-                    updateChatPosition.Position.List.DataType, GetChatTitleAndId(updateChatPosition.ChatId, chatsDict));
+                    listName, GetChatTitleAndId(updateChatPosition.ChatId, chatsDict));
                 break;
             }
 
@@ -59,7 +67,10 @@ public static class LogExtensions
 
             case TdApi.Update.UpdateUser updateUser:
             {
-                logger.Information("User: '{user}' [{id}]", updateUser.User.FirstName, updateUser.User.Id);
+                logger.Information("User: '{firstName} {lastName}' @{username} [{id}]",
+                    updateUser.User.FirstName, updateUser.User.LastName,
+                    updateUser.User.Usernames?.ActiveUsernames?.FirstOrDefault(),
+                    updateUser.User.Id);
                 break;
             }
 
@@ -117,6 +128,34 @@ public static class LogExtensions
                 break;
             }
 
+            case TdApi.Update.UpdateChatAction updateChatAction:
+            {
+                var chatAction = updateChatAction.Action.GetChatActionString();
+                var senderId = updateChatAction.SenderId switch
+                {
+                    TdApi.MessageSender.MessageSenderChat senderChat => senderChat.ChatId,
+                    TdApi.MessageSender.MessageSenderUser senderUser => senderUser.UserId,
+                };
+                
+                logger.Information(
+                    "Chat action: {senderId} {chatAction} ({titleAndId})",
+                    senderId, chatAction,
+                    GetChatTitleAndId(updateChatAction.ChatId, chatsDict));
+                break;
+            }
+            
+            case TdApi.Update.UpdateUserStatus updateUserStatus:
+            {
+                var status = updateUserStatus.Status switch
+                {
+                    TdApi.UserStatus.UserStatusOnline => "online",
+                    _ => "offline"
+                };
+                
+                logger.Information("User status: {User} went {status}", updateUserStatus.UserId, status);
+                break;
+            }
+
             case TdApi.Update.UpdateSupergroup:
             case TdApi.Update.UpdateSupergroupFullInfo:
             case TdApi.Update.UpdateBasicGroup:
@@ -127,7 +166,6 @@ public static class LogExtensions
             case TdApi.Update.UpdateMessageEdited:
             case TdApi.Update.UpdateChatMessageSender:
             case TdApi.Update.UpdateChatHasScheduledMessages:
-            case TdApi.Update.UpdateUserStatus:
             case TdApi.Update.UpdateChatUnreadReactionCount:
             // not ignore maybe
             case TdApi.Update.UpdateDefaultReactionType:
@@ -191,5 +229,22 @@ public static class TgCliExtensions
             contentStr = isMessageEmpty ? "<empty>" : "<non utf-16>";
 
         return contentStr;
+    }
+
+    public static string GetChatActionString(this TdApi.ChatAction chatAction)
+    {
+        return chatAction switch
+        {
+            TdApi.ChatAction.ChatActionChoosingSticker => "Choosing sticker...",
+            TdApi.ChatAction.ChatActionRecordingVideoNote => "Recording video message...",
+            TdApi.ChatAction.ChatActionRecordingVoiceNote => "Recording voice message...",
+            TdApi.ChatAction.ChatActionTyping => "Typing...",
+            TdApi.ChatAction.ChatActionUploadingDocument => "Uploading document...",
+            TdApi.ChatAction.ChatActionUploadingPhoto => "Uploading photo...",
+            TdApi.ChatAction.ChatActionUploadingVideo => "Uploading video...",
+            TdApi.ChatAction.ChatActionUploadingVideoNote => "Uploading video message...",
+            TdApi.ChatAction.ChatActionUploadingVoiceNote => "Uploading voice message...",
+            _ => null
+        };
     }
 }

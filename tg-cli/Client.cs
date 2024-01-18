@@ -4,17 +4,18 @@ using TdLib;
 
 namespace tg_cli;
 
-public class Client
+public interface IClient
 {
-    private readonly TgCliSettings _settings;
+    public Task LoadChatsAsync(int chatListId);
+}
+
+public sealed class Client : IDisposable, IClient
+{
     private readonly CancellationTokenSource _waitingForReadyCts = new();
 
-    public event EventHandler<TdApi.Update> UpdateReceived;
+    private TdClient _client;
 
-    public Client(TgCliSettings settings)
-    {
-        _settings = settings;
-    }
+    public event EventHandler<TdApi.Update> UpdateReceived;
 
     public async Task Start(string databaseDirPath, string filesDirPath, string tdLibLogsDirPath)
     {
@@ -22,13 +23,14 @@ public class Client
         Directory.CreateDirectory(filesDirPath);
         Directory.CreateDirectory(tdLibLogsDirPath);
 
-        var client = new TdClient();
+        _client = new TdClient();
+
         var pathToLogFile = Path.Combine(tdLibLogsDirPath, "tdlib.log");
-        InitLogging(client, pathToLogFile);
+        InitLogging(_client, pathToLogFile);
 
-        client.UpdateReceived += ClientOnUpdateReceived;
+        _client.UpdateReceived += ClientOnUpdateReceived;
 
-        await client.SetTdlibParametersAsync(false, databaseDirPath, filesDirPath, null, false, false, false,
+        await _client.SetTdlibParametersAsync(false, databaseDirPath, filesDirPath, null, false, false, false,
             false, 20623965, "6c3f5f166e8fd2b613e88395e32b42dd", "ru-RU", "Windows", "10", "1.0");
 
         try
@@ -38,8 +40,12 @@ public class Client
         catch (TaskCanceledException)
         {
         }
+    }
 
-        await client.LoadChatsAsync(null, 5);
+    void IDisposable.Dispose()
+    {
+        _waitingForReadyCts?.Dispose();
+        _client?.Dispose();
     }
 
     private void ClientOnUpdateReceived(object sender, TdApi.Update update)
@@ -63,6 +69,15 @@ public class Client
         }
 
         UpdateReceived?.Invoke(client, update);
+    }
+
+    public async Task LoadChatsAsync(int chatListId = -1)
+    {
+        var chatList = chatListId != -1
+            ? new TdApi.ChatList.ChatListFolder {ChatFolderId = chatListId}
+            : null;
+
+        await _client.LoadChatsAsync(chatList, 20);
     }
 
     private static void InitLogging(TdClient client, string pathToLogFile)
