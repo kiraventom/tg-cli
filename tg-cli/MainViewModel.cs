@@ -1,6 +1,7 @@
 ﻿using TdLib;
 using tg_cli.Extensions;
 using tg_cli.Handlers;
+using tg_cli.Utils;
 using tg_cli.ViewModels;
 
 namespace tg_cli;
@@ -18,6 +19,8 @@ public class MainViewModel
 
     private readonly Model _model;
 
+    private readonly ChangedInterface _lastInterface = new();
+
     private int[] TopChatIndexes { get; set; }
 
     private int TopChatIndex => TopChatIndexes is null ? 0 : TopChatIndexes[_model.SelectedFolderIndex];
@@ -26,7 +29,7 @@ public class MainViewModel
     private int VisibleChatsCount => _renderer.MaxVisibleChatsCount;
     private int VisibleMessagesCount => _renderer.MaxVisibleMessagesCount;
 
-    public event Action<VisibleInterface> RenderRequested;
+    public event Action<ChangedInterface> RenderRequested;
 
     public MainViewModel(IRenderer renderer, IClient client, TgCliSettings settings, Model model)
     {
@@ -47,15 +50,17 @@ public class MainViewModel
             TopChatIndexes = new int[updateChatFolders.ChatFolders.Length + 1];
 
         var requestRender = await _updateHandlers.HandleAsync(update);
-
         if (requestRender)
             RequestRender();
     }
 
     public async void OnListenerCommandReceived(Command command)
     {
+        if (TopChatIndexes is null)
+            return;
+            
         await _commandHandlers.HandleAsync(command);
-
+            
         if (_model.SelectedFolder.SelectedChatIndex < TopChatIndex)
             TopChatIndexes[_model.SelectedFolderIndex] = _model.SelectedFolder.SelectedChatIndex;
 
@@ -71,12 +76,12 @@ public class MainViewModel
         _commandInput = input;
         RequestRender();
     }
-    
+
     public bool IsChatVisible(Chat chat)
     {
         if (!_model.SelectedFolder.ChatsDict.ContainsKey(chat.Id))
             return false;
-            
+
         var index = _model.SelectedFolder.SortedChats.IndexOf(chat);
         return index >= TopChatIndex && index <= BottomChatIndex;
     }
@@ -84,20 +89,30 @@ public class MainViewModel
     private void RequestRender()
     {
         var chatsCount = Math.Min(_model.SelectedFolder.SortedChats.Count, VisibleChatsCount);
-        IReadOnlyList<Chat> visibleChats = chatsCount > 0
-            ? _model.SelectedFolder.SortedChats.GetRange(TopChatIndex, chatsCount)
-            : Array.Empty<Chat>();
+        IReadOnlyList<Chat> visibleChats = Array.Empty<Chat>();
+        if (chatsCount > 0)
+            visibleChats = _model.SelectedFolder.SortedChats.GetRange(TopChatIndex, chatsCount);
 
         var messagesCount = Math.Min(_model.SelectedFolder?.SelectedChat?.Messages?.Count ?? 0, VisibleMessagesCount);
-        IReadOnlyList<Message> visibleMessages = messagesCount > 0
-            ? _model.SelectedFolder.SelectedChat.Messages.GetRange(
-                _model.SelectedFolder.SelectedChat.Messages.Count - messagesCount, messagesCount)
-            : Array.Empty<Message>();
+        IReadOnlyList<Message> visibleMessages = Array.Empty<Message>();
+        if (_model.SelectedFolder.SelectedChat?.Messages is not null && messagesCount > 0)
+            visibleMessages = _model.SelectedFolder.SelectedChat.Messages.GetRange(
+                _model.SelectedFolder.SelectedChat.Messages.Count - messagesCount, messagesCount);
+                
+        var users = new CovariantValueDictionaryWrapper<long, IRenderUser, User>(_model.Users);
+        var selectedChat = RelativeSelectedChatIndex < visibleChats.Count 
+            ? visibleChats[RelativeSelectedChatIndex]
+            : null;
 
-        var visibleInterface = new VisibleInterface(_model.Folders, visibleChats, visibleMessages,
-            RelativeSelectedChatIndex, _commandInput, _model.SelectedFolderIndex, _model.Users);
+        var newInterface = new ChangedInterface(_model.Folders, visibleChats, visibleMessages, users,
+            _model.SelectedFolderIndex, selectedChat, RelativeSelectedChatIndex, _commandInput);
+            
+        var changedInterface = ChangedInterface.Diff(_lastInterface, newInterface);
 
-        RenderRequested?.Invoke(visibleInterface);
+        if (changedInterface.IsChanged)
+            RenderRequested?.Invoke(changedInterface);
+        
+        _lastInterface.UpdateFrom(changedInterface);
     }
 
     private void RegisterUpdateHandlers()

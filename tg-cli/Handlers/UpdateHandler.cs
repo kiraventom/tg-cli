@@ -1,5 +1,6 @@
 using TdLib;
 using tg_cli.Extensions;
+using tg_cli.Utils;
 using tg_cli.ViewModels;
 
 namespace tg_cli.Handlers;
@@ -37,7 +38,7 @@ public class UpdateNewChatHandler : UpdateHandler<TdApi.Update.UpdateNewChat>
     protected override Task<bool> HandleAsync(TdApi.Update.UpdateNewChat update)
     {
         var chat = update.Chat;
-        var chatTitle = Utils.RemoveNonUtf16Characters(chat.Title);
+        var chatTitle = StringUtils.RemoveNonUtf16Characters(chat.Title);
         var newChat = new Chat(chat.Id, chatTitle)
         {
             UnreadCount = chat.UnreadCount,

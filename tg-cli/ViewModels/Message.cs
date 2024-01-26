@@ -1,6 +1,6 @@
 namespace tg_cli.ViewModels;
 
-public class Message
+public class Message : IRenderMessage
 {
     public long Id { get; }
     public string Text { get; }

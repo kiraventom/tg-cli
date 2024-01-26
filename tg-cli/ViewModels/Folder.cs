@@ -3,9 +3,10 @@ using System.Collections.Specialized;
 
 namespace tg_cli.ViewModels;
 
-public class Folder
+public class Folder : IRenderFolder
 {
     public int SelectedChatIndex { get; set; }
+
     public Chat SelectedChat => SelectedChatIndex < SortedChats.Count ? SortedChats[SelectedChatIndex] : null;
 
     public ObservableCollection<Chat> Chats { get; } = new();
@@ -14,6 +15,11 @@ public class Folder
 
     public int Id { get; }
     public string Title { get; }
+
+    public int UnreadChatsCount => Chats.Count(c => c.UnreadCount > 0);
+    public bool HasUnmutedChat => Chats.Where(c => c.UnreadCount > 0).Any(c => !c.IsMuted);
+    
+    IRenderChat IRenderFolder.SelectedChat => SelectedChat;
 
     public Folder(int id, string title)
     {

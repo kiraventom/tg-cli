@@ -1,4 +1,5 @@
 using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace tg_cli.Extensions;
 
@@ -12,5 +13,25 @@ public static class AnsiConsoleExtensions
             if (condition.Invoke(value))
                 return value;
         }
+    }
+
+    public static Table SetRow(this Table table, int i, params IRenderable[] columns)
+    {
+        if (table.Rows.Count <= i)
+        {
+            table.AddRow(columns);
+            return table;
+        }
+
+        for (var j = 0; j < columns.Length; ++j)
+            table.UpdateCell(i, j, columns[j]);
+
+        return table;
+    }
+
+    public static void WriteAt(this IAnsiConsole console, IRenderable renderable, int left, int top) 
+    {
+        console.Cursor.SetPosition(left, top);
+        console.Write(renderable);
     }
 }

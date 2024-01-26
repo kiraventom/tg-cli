@@ -1,5 +1,6 @@
 ﻿using Serilog.Core;
 using TdLib;
+using tg_cli.Utils;
 using tg_cli.ViewModels;
 
 namespace tg_cli.Extensions;
@@ -223,7 +224,7 @@ public static class TgCliExtensions
         };
 
         var isMessageEmpty = string.IsNullOrEmpty(contentStr);
-        contentStr = Utils.RemoveNonUtf16Characters(contentStr);
+        contentStr = StringUtils.RemoveNonUtf16Characters(contentStr);
 
         if (string.IsNullOrEmpty(contentStr))
             contentStr = isMessageEmpty ? "<empty>" : "<non utf-16>";

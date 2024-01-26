@@ -1,6 +1,8 @@
-﻿namespace tg_cli.ViewModels;
+﻿using tg_cli.Utils;
 
-public class Chat
+namespace tg_cli.ViewModels;
+
+public class Chat : IRenderChat
 {
     public class Comparer : IComparer<Chat>
     {
@@ -21,9 +23,15 @@ public class Chat
             return yPosition.CompareTo(xPosition);
         }
     }
+    
+    private readonly CovariantKeyDictionaryWrapper<IRenderFolder, Folder, long> _readonlyPositions;
 
     public long Id { get; }
     public Dictionary<Folder, long> Positions { get; } = new();
+    
+    IReadOnlyDictionary<IRenderFolder, long> IRenderChat.Positions => _readonlyPositions;
+    IRenderMessage IRenderChat.LastMessage => LastMessage;
+    
     public string Title { get; set; }
     public int UnreadCount { get; set; }
     public bool IsMuted { get; set; }
@@ -36,5 +44,6 @@ public class Chat
     {
         Id = id;
         Title = title;
+        _readonlyPositions = new CovariantKeyDictionaryWrapper<IRenderFolder, Folder, long>(Positions);
     }
 }

@@ -1,6 +1,6 @@
 ﻿namespace tg_cli.ViewModels;
 
-public class User
+public class User : IRenderUser
 {
     public long Id { get; }
     public string FirstName { get; }
