@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using Spectre.Console;
 
-namespace tg_cli;
+namespace TgCli;
 
 public class InputListener
 {

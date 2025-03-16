@@ -2,7 +2,7 @@
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace tg_cli;
+namespace TgCli;
 
 public class FakeConsole : IAnsiConsole
 {

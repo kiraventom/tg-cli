@@ -1,6 +1,6 @@
 ﻿using SettingsManagement;
 
-namespace tg_cli;
+namespace TgCli;
 
 #pragma warning disable CS0169
 

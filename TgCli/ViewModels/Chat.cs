@@ -1,6 +1,6 @@
-﻿using tg_cli.Utils;
+﻿using TgCli.Utils;
 
-namespace tg_cli.ViewModels;
+namespace TgCli.ViewModels;
 
 public class Chat : IRenderChat
 {

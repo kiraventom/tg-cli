@@ -1,4 +1,4 @@
-﻿namespace tg_cli;
+﻿namespace TgCli;
 
 public class ChangedInterface
 {

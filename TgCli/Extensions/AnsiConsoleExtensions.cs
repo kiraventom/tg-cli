@@ -1,7 +1,7 @@
-using Spectre.Console;
+﻿using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace tg_cli.Extensions;
+namespace TgCli.Extensions;
 
 public static class AnsiConsoleExtensions
 {

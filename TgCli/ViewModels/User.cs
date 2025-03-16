@@ -1,4 +1,4 @@
-﻿namespace tg_cli.ViewModels;
+﻿namespace TgCli.ViewModels;
 
 public class User : IRenderUser
 {

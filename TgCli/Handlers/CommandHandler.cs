@@ -1,7 +1,7 @@
-﻿using tg_cli.Extensions;
-using tg_cli.ViewModels;
+﻿using TgCli.Extensions;
+using TgCli.ViewModels;
 
-namespace tg_cli.Handlers;
+namespace TgCli.Handlers;
 
 public abstract class CommandHandler<T> : IHandler<Command>
 {

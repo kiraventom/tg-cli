@@ -1,8 +1,8 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 using TdLib;
 
-namespace tg_cli;
+namespace TgCli;
 
 public interface IClient
 {

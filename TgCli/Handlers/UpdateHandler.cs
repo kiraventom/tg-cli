@@ -1,9 +1,9 @@
-using TdLib;
-using tg_cli.Extensions;
-using tg_cli.Utils;
-using tg_cli.ViewModels;
+﻿using TdLib;
+using TgCli.Extensions;
+using TgCli.Utils;
+using TgCli.ViewModels;
 
-namespace tg_cli.Handlers;
+namespace TgCli.Handlers;
 
 public abstract class UpdateHandler<T> : IHandler<TdApi.Update>
 {

@@ -1,8 +1,8 @@
 ﻿using Spectre.Console;
 using TdLib;
-using tg_cli.Extensions;
+using TgCli.Extensions;
 
-namespace tg_cli;
+namespace TgCli;
 
 public class Authorizer
 {

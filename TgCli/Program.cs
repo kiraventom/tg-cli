@@ -4,7 +4,7 @@ using Spectre.Console;
 using Serilog;
 using Serilog.Core;
 
-namespace tg_cli;
+namespace TgCli;
 
 public static class Program
 {

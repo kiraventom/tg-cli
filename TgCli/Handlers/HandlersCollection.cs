@@ -1,4 +1,4 @@
-﻿namespace tg_cli.Handlers;
+﻿namespace TgCli.Handlers;
 
 public interface IHandler<in T>
 {

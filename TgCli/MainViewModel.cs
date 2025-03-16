@@ -1,10 +1,10 @@
 ﻿using TdLib;
-using tg_cli.Extensions;
-using tg_cli.Handlers;
-using tg_cli.Utils;
-using tg_cli.ViewModels;
+using TgCli.Extensions;
+using TgCli.Handlers;
+using TgCli.Utils;
+using TgCli.ViewModels;
 
-namespace tg_cli;
+namespace TgCli;
 
 public class MainViewModel
 {

@@ -1,10 +1,10 @@
 ﻿using System.Text;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using tg_cli.Extensions;
-using tg_cli.Utils;
+using TgCli.Extensions;
+using TgCli.Utils;
 
-namespace tg_cli;
+namespace TgCli;
 
 public interface IRenderer
 {

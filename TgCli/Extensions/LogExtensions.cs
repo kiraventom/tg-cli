@@ -1,9 +1,9 @@
 ﻿using Serilog.Core;
 using TdLib;
-using tg_cli.Utils;
-using tg_cli.ViewModels;
+using TgCli.Utils;
+using TgCli.ViewModels;
 
-namespace tg_cli.Extensions;
+namespace TgCli.Extensions;
 
 public static class LogExtensions
 {

@@ -1,7 +1,7 @@
 ﻿using TdLib;
-using tg_cli.ViewModels;
+using TgCli.ViewModels;
 
-namespace tg_cli;
+namespace TgCli;
 
 public class Model
 {

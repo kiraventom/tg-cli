@@ -1,7 +1,7 @@
 ﻿using System.Collections;
 using TdLib;
 
-namespace tg_cli.Utils;
+namespace TgCli.Utils;
 
 public static class StringUtils
 {

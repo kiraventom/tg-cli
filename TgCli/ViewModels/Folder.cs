@@ -1,7 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 
-namespace tg_cli.ViewModels;
+namespace TgCli.ViewModels;
 
 public class Folder : IRenderFolder
 {
