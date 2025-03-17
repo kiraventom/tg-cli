@@ -20,7 +20,7 @@ public static class LogExtensions
 
             case TdApi.Update.UpdateChatFolders updateChatFolders:
             {
-                var titles = updateChatFolders.ChatFolders.Select(cf => cf.Title);
+                var titles = updateChatFolders.ChatFolders.Select(cf => cf.Name.Text.Text);
                 logger.Information("Chat folders: {titles}", string.Join(", ", titles));
                 break;
             }
@@ -173,7 +173,6 @@ public static class LogExtensions
             case TdApi.Update.UpdateAnimationSearchParameters:
             case TdApi.Update.UpdateAccentColors:
             case TdApi.Update.UpdateAttachmentMenuBots:
-            case TdApi.Update.UpdateSelectedBackground:
             case TdApi.Update.UpdateFileDownloads:
             case TdApi.Update.UpdateDiceEmojis:
             case TdApi.Update.UpdateActiveEmojiReactions:

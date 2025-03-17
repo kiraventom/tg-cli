@@ -146,7 +146,7 @@ public class UpdateChatFoldersHandler : UpdateHandler<TdApi.Update.UpdateChatFol
     {
         foreach (var chatFolderInfo in update.ChatFolders)
         {
-            var folder = new Folder(chatFolderInfo.Id, chatFolderInfo.Title);
+            var folder = new Folder(chatFolderInfo.Id, chatFolderInfo.Name.Text.Text);
             Model.Folders.Add(folder);
         }
 

@@ -167,24 +167,11 @@ public class Renderer : IRenderer
     {
         var realChatWidth = ChatWidth - 6; // magic number
         var oddStyle = new Style(null, Color.Grey);
-        var fakeConsole = new FakeConsole(realChatWidth, _console.Profile.Height);
         var linesCount = MaxVisibleMessagesCount;
 
         var messageTextsList = new List<Text>();
         for (var i = messages.Count - 1; i >= 0; --i)
         {
-            // var message = messages[i];
-            // var text = new Text(message.Text.EscapeMarkup()).Fold();
-            // var segments = text.GetSegments(fakeConsole);
-            // var renderedText = segments.Select(s => s.Text).Aggregate((t, s) => t + s);
-            // var renderedLinesCount = renderedText.Count(c => c == '\n') + 1;
-            // linesCount -= renderedLinesCount;
-            // if (linesCount < 0)
-            //     break;
-            //
-            // var style = i % 2 == 0 ? Style.Plain : oddStyle;
-            // messageTextsList.Insert(0, new Text(renderedText, style));
-
             var firstLine = messages[i].Text.Split('\n', (StringSplitOptions)0b11)[0];
             firstLine = StringUtils.RemoveNonUtf16Characters(firstLine);
             var text = CropString(firstLine.EscapeMarkup(), realChatWidth);
@@ -209,18 +196,6 @@ public class Renderer : IRenderer
         _console.WriteAt(titleText, ChatListWidth + 6, 3);
     }
 
-    // private void RenderChatTitleInList(IRenderChat selectedChat, int selectedChatIndex, bool isSelected)
-    // {
-    //     // Render unselected chat in list
-    //     if (_cache.LastInterface.SelectedChat is { } oldChat && _cache.LastInterface.SelectedChatIndex is { } oldIndex)
-    //         test();
-    //
-    //     // Render selected chat in list
-    //     var selectedChatMarkup = MarkupChat(selectedChat, true, false);
-    //     var selectedChatTopOffset = ChatListTop + selectedChatIndex * 2;
-    //     _console.WriteAt(selectedChatMarkup, ChatListLeft, selectedChatTopOffset);
-    // }
-
     private void RenderChatTitleInList(IRenderChat chat, int chatIndex, bool isSelected)
     {
         var chatMarkup = MarkupChat(chat, isSelected, false);
@@ -233,8 +208,6 @@ public class Renderer : IRenderer
         for (var i = 0; i < chats.Count; ++i)
         {
             var chat = chats[i];
-            // var isOnline = changedInterface.Users.TryGetValue(chat.Id, out var user) && user.IsOnline;
-            // var chatMarkup = MarkupChat(chat, i == changedInterface.SelectedChatIndex, isOnline);
 
             var topOffset = ChatListTop + i * 2;
             var chatMarkup = MarkupChat(chat, false, false);
