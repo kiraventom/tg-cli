@@ -41,7 +41,7 @@ public static class Program
         client.UpdateReceived += viewModel.OnClientUpdateReceived;
         
         inputListener.CommandReceived += viewModel.OnListenerCommandReceived;
-        inputListener.InputReceived += viewModel.OnListenerInputReceived;
+        inputListener.InputUpdated += viewModel.OnListenerInputUpdated;
         
         viewModel.RenderRequested += renderer.OnRenderRequested;
         

@@ -3,6 +3,7 @@ using TgCli.ViewModels;
 
 namespace TgCli.Handlers;
 
+// TODO: Move all code to Commands and get rid of CommandHandlers
 public abstract class CommandHandler<T> : IHandler<Command>
 {
     protected Model Model { get; }

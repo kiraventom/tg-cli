@@ -1,73 +1,131 @@
 ﻿namespace TgCli;
 
-public abstract class Command
+public class QuitCommand : InputCommand
 {
-    public string Parameter { get; }
-
-    protected Command()
+    public QuitCommand() : base("q")
     {
+
     }
 
-    protected Command(string parameter)
+    public override Task Execute(string parameter = null)
     {
-        Parameter = parameter;
-    }
-}
-
-public class QuitCommand : Command
-{
-}
-
-public class MoveUpCommand : Command
-{
-}
-
-public class MoveDownCommand : Command
-{
-}
-
-public class MoveToTopCommand : Command
-{
-}
-
-public class MoveToBottomCommand : Command
-{
-}
-
-public class NextFolderCommand : Command
-{
-}
-
-public class PreviousFolderCommand : Command
-{
-}
-
-public class SelectFolderCommand : Command
-{
-    public int FolderIndex { get; }
-
-    public SelectFolderCommand(string parameter) : base(parameter)
-    {
-        FolderIndex = int.Parse(parameter);
+        return Task.CompletedTask;
     }
 }
 
-public class LastFolderCommand : Command
+public class MoveUpCommand : InputCommand
 {
+    public MoveUpCommand() : base("k")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
 }
 
-public class MoveSeparatorToLeftCommand : Command
+public class MoveDownCommand : InputCommand
 {
+    public MoveDownCommand() : base("j")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
 }
 
-public class MoveSeparatorToRightCommand : Command
+public class MoveToTopCommand : InputCommand
 {
+    public MoveToTopCommand() : base("gg")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
 }
 
-public class LoadChatsCommand : Command
+public class MoveToBottomCommand : InputCommand
 {
+    public MoveToBottomCommand() : base("G")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
 }
 
-public class LoadMessagesCommand : Command
+public class NextFolderCommand : InputCommand
 {
+    public NextFolderCommand() : base("gt")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+public class PreviousFolderCommand : InputCommand
+{
+    public PreviousFolderCommand() : base("gT")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+public class SelectFolderCommand : ParametrizedInputCommand
+{
+    public SelectFolderCommand() : base("g_t", "0123456789")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+public class LoadChatsCommand : InputCommand
+{
+    public LoadChatsCommand() : base("R")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+public class LoadMessagesCommand : InputCommand
+{
+    public LoadMessagesCommand() : base("l")
+    {
+
+    }
+
+    public override Task Execute(string parameter = null)
+    {
+        return Task.CompletedTask;
+    }
 }

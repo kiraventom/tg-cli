@@ -74,7 +74,7 @@ public class MainViewModel
         RequestRender();
     }
 
-    public void OnListenerInputReceived(string input)
+    public void OnListenerInputUpdated(string input)
     {
         _commandInput = input;
         RequestRender();
