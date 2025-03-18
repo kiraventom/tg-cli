@@ -1,4 +1,4 @@
-﻿using Serilog.Core;
+﻿using Serilog;
 using TdLib;
 using TgCli.Utils;
 using TgCli.ViewModels;
@@ -7,7 +7,7 @@ namespace TgCli.Extensions;
 
 public static class LogExtensions
 {
-    public static void LogUpdate(this Logger logger, TdApi.Update update, IReadOnlyDictionary<long, Chat> chatsDict)
+    public static void LogUpdate(this ILogger logger, TdApi.Update update, IReadOnlyDictionary<long, Chat> chatsDict)
     {
         switch (update)
         {

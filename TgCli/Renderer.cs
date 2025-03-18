@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Serilog;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using TgCli.Extensions;
@@ -65,6 +66,7 @@ public class Renderer : IRenderer
 
     private readonly IAnsiConsole _console;
     private readonly TgCliSettings _settings;
+    private readonly ILogger _logger;
     private readonly RendererCache _cache;
 
     private int ConsoleWidthWithoutBorders => _console.Profile.Width - 7;
@@ -89,11 +91,12 @@ public class Renderer : IRenderer
 
     public int MaxVisibleMessagesCount => MaxVisibleChatsCount * 2;
 
-    public Renderer(IAnsiConsole console, TgCliSettings settings)
+    public Renderer(IAnsiConsole console, ILogger logger, TgCliSettings settings)
     {
         _console = console;
         _settings = settings;
         _cache = new RendererCache(this);
+        _logger = logger;
     }
 
     public void OnRenderRequested(ChangedInterface changedInterface)

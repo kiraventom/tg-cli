@@ -1,5 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 using System.Text;
+using Serilog;
 using TdLib;
 
 namespace TgCli;
@@ -13,10 +14,16 @@ public interface IClient
 public sealed class Client : IDisposable, IClient
 {
     private readonly CancellationTokenSource _waitingForReadyCts = new();
+    private readonly ILogger _logger;
 
     private TdClient _client;
 
     public event EventHandler<TdApi.Update> UpdateReceived;
+
+    public Client(ILogger logger)
+    {
+        _logger = logger;
+    }
 
     public async Task Start(string databaseDirPath, string filesDirPath, string tdLibLogsDirPath)
     {
@@ -41,12 +48,16 @@ public sealed class Client : IDisposable, IClient
         catch (TaskCanceledException)
         {
         }
+        catch (Exception e)
+        {
+            _logger.Error(e.ToString());
+        }
     }
 
     public async Task LoadChatsAsync(int chatListId = -1)
     {
         var chatList = chatListId != -1
-            ? new TdApi.ChatList.ChatListFolder {ChatFolderId = chatListId}
+            ? new TdApi.ChatList.ChatListFolder { ChatFolderId = chatListId }
             : null;
 
         await _client.LoadChatsAsync(chatList, 20);
@@ -61,9 +72,9 @@ public sealed class Client : IDisposable, IClient
         }
         catch (TdException e)
         {
-            Program.Logger.Error(e.Error.Message);
+            _logger.Error(e.Error.Message);
         }
-        
+
         return messages;
     }
 
@@ -75,25 +86,32 @@ public sealed class Client : IDisposable, IClient
 
     private void ClientOnUpdateReceived(object sender, TdApi.Update update)
     {
-        var client = (TdClient) sender;
-        switch (update)
+        var client = (TdClient)sender;
+        try
         {
-            case TdApi.Update.UpdateAuthorizationState updateAuthState:
-                switch (updateAuthState.AuthorizationState)
-                {
-                    case TdApi.AuthorizationState.AuthorizationStateReady:
-                        _waitingForReadyCts.Cancel();
-                        break;
+            switch (update)
+            {
+                case TdApi.Update.UpdateAuthorizationState updateAuthState:
+                    switch (updateAuthState.AuthorizationState)
+                    {
+                        case TdApi.AuthorizationState.AuthorizationStateReady:
+                            _waitingForReadyCts.Cancel();
+                            break;
 
-                    case TdApi.AuthorizationState.AuthorizationStateClosed:
-                        client.Dispose();
-                        break;
-                }
+                        case TdApi.AuthorizationState.AuthorizationStateClosed:
+                            client.Dispose();
+                            break;
+                    }
 
-                break;
+                    break;
+            }
+
+            UpdateReceived?.Invoke(client, update);
         }
-
-        UpdateReceived?.Invoke(client, update);
+        catch (Exception e)
+        {
+            _logger.Error(e.ToString());
+        }
     }
 
     private static void InitLogging(TdClient client, string pathToLogFile)

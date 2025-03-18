@@ -1,4 +1,5 @@
-﻿using Spectre.Console;
+﻿using Serilog;
+using Spectre.Console;
 using TdLib;
 using TgCli.Extensions;
 
@@ -7,12 +8,14 @@ namespace TgCli;
 public class Authorizer
 {
     private readonly IAnsiConsole _console;
+    private readonly ILogger _logger;
 
-    public Authorizer(IAnsiConsole console)
+    public Authorizer(IAnsiConsole console, ILogger logger)
     {
         _console = console;
+        _logger = logger;
     }
-    
+
     public async void OnClientUpdateReceived(object sender, TdApi.Update update)
     {
         var client = (TdClient)sender;

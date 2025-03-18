@@ -1,10 +1,13 @@
-﻿using TdLib;
+﻿using Serilog;
+using TdLib;
 using TgCli.ViewModels;
 
 namespace TgCli;
 
 public class Model
 {
+    private readonly ILogger _logger;
+
     public Dictionary<long, User> Users { get; } = new();
     public List<Folder> Folders { get; } = new();
 
@@ -14,9 +17,10 @@ public class Model
 
     public Folder AllChatsFolder => Folders[0];
     public Folder SelectedFolder => Folders[SelectedFolderIndex];
-    
-    public Model()
+
+    public Model(ILogger logger)
     {
+        _logger = logger;
         Folders.Add(new Folder(-1, "All chats"));
     }
 

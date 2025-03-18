@@ -1,4 +1,5 @@
-﻿using TdLib;
+﻿using Serilog;
+using TdLib;
 using TgCli.Extensions;
 using TgCli.Handlers;
 using TgCli.Utils;
@@ -14,6 +15,7 @@ public class MainViewModel
     private readonly IRenderer _renderer;
     private readonly IClient _client;
     private readonly TgCliSettings _settings;
+    private readonly ILogger _logger;
 
     private string _commandInput = string.Empty;
 
@@ -31,7 +33,7 @@ public class MainViewModel
 
     public event Action<ChangedInterface> RenderRequested;
 
-    public MainViewModel(IRenderer renderer, IClient client, TgCliSettings settings, Model model)
+    public MainViewModel(ILogger logger, IRenderer renderer, IClient client, TgCliSettings settings, Model model)
     {
         _renderer = renderer;
         _client = client;
@@ -40,11 +42,12 @@ public class MainViewModel
 
         RegisterUpdateHandlers();
         RegisterCommandHandlers();
+        _logger = logger;
     }
 
     public async void OnClientUpdateReceived(object sender, TdApi.Update update)
     {
-        Program.Logger.LogUpdate(update, _model.AllChatsFolder.ChatsDict);
+        _logger.LogUpdate(update, _model.AllChatsFolder.ChatsDict);
 
         if (update is TdApi.Update.UpdateChatFolders updateChatFolders)
             TopChatIndexes = new int[updateChatFolders.ChatFolders.Length + 1];

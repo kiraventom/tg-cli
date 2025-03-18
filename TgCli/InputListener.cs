@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Serilog;
 using Spectre.Console;
 
 namespace TgCli;
@@ -7,16 +8,18 @@ public class InputListener
 {
     private readonly IAnsiConsole _console;
     private readonly StringBuilder _inputBuilder = new();
+    private readonly ILogger _logger;
 
     private readonly CancellationTokenSource _cts = new();
 
     public event Action<string> InputReceived;
     public event Action<Command> CommandReceived;
 
-    public InputListener(IAnsiConsole console)
+    public InputListener(IAnsiConsole console, ILogger logger)
     {
         _console = console;
         CommandReceived += OnCommandReceived;
+        _logger = logger;
     }
 
     public async Task StartListen()
